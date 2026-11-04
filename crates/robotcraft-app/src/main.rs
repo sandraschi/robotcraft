@@ -18,6 +18,9 @@ use tokio::runtime::Runtime;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActiveWorkspace {
     Dashboard,
+    ThreeJsViewer,
+    AiWorkflows,
+    CadPlans,
     TeleopControl,
     KinematicsStudio,
     FleetStatus,
@@ -36,6 +39,8 @@ pub struct RobotCraftGui {
     pub target_z: f32,
     pub telemetry_data: Option<Value>,
     pub model_data: Option<Value>,
+    pub cad_plan_data: Option<Value>,
+    pub workflow_result: Option<Value>,
     pub reachability_result: Option<Value>,
     pub status_message: String,
     pub is_dark_theme: bool,
@@ -44,6 +49,9 @@ pub struct RobotCraftGui {
     pub auth_password_input: String,
     pub show_auth_modal: bool,
     pub show_about_dialog: bool,
+    pub virtual_x: f32,
+    pub virtual_y: f32,
+    pub virtual_yaw: f32,
 }
 
 impl RobotCraftGui {
@@ -51,8 +59,8 @@ impl RobotCraftGui {
         let mut app = Self {
             store,
             runtime,
-            active_workspace: ActiveWorkspace::Dashboard,
-            selected_robot: "unitree_go2".to_string(),
+            active_workspace: ActiveWorkspace::ThreeJsViewer,
+            selected_robot: "saschibot".to_string(),
             linear_x: 0.0,
             linear_y: 0.0,
             angular_z: 0.0,
@@ -61,6 +69,8 @@ impl RobotCraftGui {
             target_z: 0.35,
             telemetry_data: None,
             model_data: None,
+            cad_plan_data: None,
+            workflow_result: None,
             reachability_result: None,
             status_message: format!("RobotCraft v{APP_VERSION} [Control Port {CONTROL_PORT} Active]"),
             is_dark_theme: true,
@@ -69,10 +79,49 @@ impl RobotCraftGui {
             auth_password_input: String::new(),
             show_auth_modal: false,
             show_about_dialog: false,
+            virtual_x: 0.0,
+            virtual_y: 0.0,
+            virtual_yaw: 0.0,
         };
         app.fetch_telemetry();
         app.fetch_model();
+        app.fetch_cad();
         app
+    }
+
+    pub fn fetch_cad(&mut self) {
+        let id = self.selected_robot.clone();
+        let res = self.runtime.block_on(dispatch(Command::GetRobotCadPlan { robot_id: id }, &self.store));
+        self.cad_plan_data = Some(res);
+    }
+
+    pub fn trigger_ai_workflow(&mut self, wf_type: &str) {
+        let id = self.selected_robot.clone();
+        let res = self.runtime.block_on(dispatch(
+            Command::RunAiBehaviorWorkflow {
+                robot_id: id.clone(),
+                workflow_type: wf_type.to_string(),
+            },
+            &self.store,
+        ));
+        self.workflow_result = Some(res);
+        self.status_message = format!("Dispatched AI Workflow '{wf_type}' for {id} in virtual space");
+
+        match wf_type {
+            "explore_and_map" => {
+                self.virtual_x += 0.4;
+                self.virtual_y += 0.2;
+                self.virtual_yaw += 0.5;
+            }
+            "wave_and_greet" => {
+                self.virtual_yaw = 0.0;
+            }
+            "stand_and_balance" => {
+                self.virtual_x = 0.0;
+                self.virtual_y = 0.0;
+            }
+            _ => {}
+        }
     }
 
     pub fn fetch_telemetry(&mut self) {
@@ -139,24 +188,35 @@ impl eframe::App for RobotCraftGui {
                 });
 
                 ui.menu_button("Robots", |ui| {
+                    if ui.button("Saschibot Mobile Service Bot P6").clicked() {
+                        self.selected_robot = "saschibot".to_string();
+                        self.fetch_telemetry();
+                        self.fetch_cad();
+                        ui.close();
+                    }
+                    if ui.button("NoriRobotics A3 Mobile Manipulator").clicked() {
+                        self.selected_robot = "nori_a3".to_string();
+                        self.fetch_telemetry();
+                        self.fetch_cad();
+                        ui.close();
+                    }
+                    if ui.button("Noetix Bumi Bipedal Humanoid").clicked() {
+                        self.selected_robot = "noetix_bumi".to_string();
+                        self.fetch_telemetry();
+                        self.fetch_cad();
+                        ui.close();
+                    }
+                    ui.separator();
                     if ui.button("Unitree Go2 Quadruped").clicked() {
                         self.selected_robot = "unitree_go2".to_string();
-                        self.fetch_model();
+                        self.fetch_telemetry();
+                        self.fetch_cad();
                         ui.close();
                     }
-                    if ui.button("Universal Robots UR5e Arm").clicked() {
-                        self.selected_robot = "ur5e".to_string();
-                        self.fetch_model();
-                        ui.close();
-                    }
-                    if ui.button("Unitree H1 Humanoid").clicked() {
-                        self.selected_robot = "unitree_h1".to_string();
-                        self.fetch_model();
-                        ui.close();
-                    }
-                    if ui.button("TurtleBot4 Mobile Base").clicked() {
-                        self.selected_robot = "turtlebot4".to_string();
-                        self.fetch_model();
+                    if ui.button("CraftArm 6-DOF Industrial Arm").clicked() {
+                        self.selected_robot = "craftarm_6dof".to_string();
+                        self.fetch_telemetry();
+                        self.fetch_cad();
                         ui.close();
                     }
                 });
@@ -242,6 +302,16 @@ impl eframe::App for RobotCraftGui {
                 ui.selectable_label(active, rich).clicked()
             };
 
+            if nav_btn(ui, self.active_workspace == ActiveWorkspace::ThreeJsViewer, "🪐 Three.js 3D View") {
+                self.active_workspace = ActiveWorkspace::ThreeJsViewer;
+            }
+            if nav_btn(ui, self.active_workspace == ActiveWorkspace::AiWorkflows, "🧠 AI Motion Workflows") {
+                self.active_workspace = ActiveWorkspace::AiWorkflows;
+            }
+            if nav_btn(ui, self.active_workspace == ActiveWorkspace::CadPlans, "📐 CAD Plans & BOM") {
+                self.active_workspace = ActiveWorkspace::CadPlans;
+                self.fetch_cad();
+            }
             if nav_btn(ui, self.active_workspace == ActiveWorkspace::Dashboard, "📊 Live Telemetry") {
                 self.active_workspace = ActiveWorkspace::Dashboard;
                 self.fetch_telemetry();
@@ -259,6 +329,155 @@ impl eframe::App for RobotCraftGui {
 
         // 4. Central Panel
         egui::CentralPanel::default().show(ui, |ui| match self.active_workspace {
+            ActiveWorkspace::ThreeJsViewer => {
+                ui.heading("🪐 Three.js 3D Virtual Robot Viewer");
+                ui.label("Full WebGL Three.js viewport for Saschibot P6, NoriRobotics A3, and Noetix Bumi.");
+                ui.separator();
+
+                ui.horizontal(|ui| {
+                    ui.label("Selected Robot for 3D View:");
+                    if ui.selectable_label(self.selected_robot == "saschibot", "🤖 Saschibot P6").clicked() {
+                        self.selected_robot = "saschibot".to_string();
+                        self.fetch_telemetry();
+                        self.fetch_cad();
+                    }
+                    if ui.selectable_label(self.selected_robot == "nori_a3", "🤖 NoriRobotics A3").clicked() {
+                        self.selected_robot = "nori_a3".to_string();
+                        self.fetch_telemetry();
+                        self.fetch_cad();
+                    }
+                    if ui.selectable_label(self.selected_robot == "noetix_bumi", "🤖 Noetix Bumi").clicked() {
+                        self.selected_robot = "noetix_bumi".to_string();
+                        self.fetch_telemetry();
+                        self.fetch_cad();
+                    }
+                });
+
+                ui.add_space(8.0);
+                ui.group(|ui| {
+                    ui.horizontal(|ui| {
+                        ui.colored_label(cyan, "🔗 Three.js Standalone Viewer Webapp:");
+                        let viewer_path = std::env::current_dir()
+                            .map(|p| p.join("web").join("three_viewer.html").to_string_lossy().to_string())
+                            .unwrap_or_else(|_| "D:/Dev/repos/robotcraft/web/three_viewer.html".to_string());
+                        ui.hyperlink_to("Open Three.js 3D Canvas", format!("file:///{viewer_path}"));
+                    });
+                    ui.label("Full interactive orbit controls, bimanual arm mesh rigs, RPLiDar C1 dome, and bipedal legs.");
+                });
+
+                ui.add_space(8.0);
+                ui.heading("Realtime Virtual Space Coordinates");
+                ui.group(|ui| {
+                    let (rect, _response) = ui.allocate_exact_size(egui::vec2(320.0, 160.0), egui::Sense::hover());
+                    let painter = ui.painter();
+                    let center = rect.center();
+                    // Draw grid in egui
+                    painter.rect_stroke(rect, 4.0, egui::Stroke::new(1.5, Color32::from_rgb(51, 65, 85)), egui::StrokeKind::Outside);
+                    painter.line_segment([egui::pos2(rect.left(), center.y), egui::pos2(rect.right(), center.y)], egui::Stroke::new(1.0, Color32::from_rgb(30, 41, 59)));
+                    painter.line_segment([egui::pos2(center.x, rect.top()), egui::pos2(center.x, rect.bottom())], egui::Stroke::new(1.0, Color32::from_rgb(30, 41, 59)));
+
+                    // Robot location in virtual space
+                    let bot_pos = center + egui::vec2(self.virtual_x * 80.0, -self.virtual_y * 80.0);
+                    painter.circle_filled(bot_pos, 12.0, cyan);
+                    painter.circle_stroke(bot_pos, 12.0, egui::Stroke::new(2.0, Color32::WHITE));
+                    let heading = egui::vec2(self.virtual_yaw.cos() * 20.0, -self.virtual_yaw.sin() * 20.0);
+                    painter.line_segment([bot_pos, bot_pos + heading], egui::Stroke::new(3.0, Color32::from_rgb(245, 158, 11)));
+                });
+
+                ui.horizontal(|ui| {
+                    ui.label(format!("Virtual Pose: X={:.2}m, Y={:.2}m, Yaw={:.2} rad", self.virtual_x, self.virtual_y, self.virtual_yaw));
+                    if ui.button("Zero Virtual Pose").clicked() {
+                        self.virtual_x = 0.0;
+                        self.virtual_y = 0.0;
+                        self.virtual_yaw = 0.0;
+                    }
+                });
+            }
+            ActiveWorkspace::AiWorkflows => {
+                ui.heading("🧠 AI Motion & Trajectory Workflows");
+                ui.label("Autonomous motion planning in virtual space with collision avoidance and joint kinematic profiles.");
+                ui.separator();
+
+                ui.horizontal(|ui| {
+                    ui.label(format!("Target Robot: {}", self.selected_robot));
+                });
+
+                ui.add_space(8.0);
+                ui.columns(2, |cols| {
+                    cols[0].group(|ui| {
+                        ui.colored_label(cyan, "👋 Wave & Greet Workflow");
+                        ui.label("Servos articulate arm to friendly greeting wave keyframe trajectory.");
+                        if ui.button("▶ Dispatch Wave & Greet").clicked() {
+                            self.trigger_ai_workflow("wave_and_greet");
+                        }
+                    });
+
+                    cols[1].group(|ui| {
+                        ui.colored_label(Color32::from_rgb(16, 185, 129), "🗺️ SLAM Explore & Map");
+                        ui.label("RPLiDar active sweep + mobile base boundary traversal.");
+                        if ui.button("▶ Dispatch Explore & Map").clicked() {
+                            self.trigger_ai_workflow("explore_and_map");
+                        }
+                    });
+                });
+
+                ui.add_space(6.0);
+                ui.columns(2, |cols| {
+                    cols[0].group(|ui| {
+                        ui.colored_label(Color32::from_rgb(245, 158, 11), "📦 Bimanual Caddy Pickup");
+                        ui.label("3-stage mast extension + Robonine 84mm parallel jaw grasping.");
+                        if ui.button("▶ Dispatch Caddy Dock").clicked() {
+                            self.trigger_ai_workflow("bimanual_caddy_pickup");
+                        }
+                    });
+
+                    cols[1].group(|ui| {
+                        ui.colored_label(Color32::from_rgb(168, 85, 247), "⚖️ ZMP Stand & Balance");
+                        ui.label("Inverted pendulum bipedal stabilization for humanoid locomotion.");
+                        if ui.button("▶ Dispatch Stand & Balance").clicked() {
+                            self.trigger_ai_workflow("stand_and_balance");
+                        }
+                    });
+                });
+
+                if let Some(ref wf) = self.workflow_result {
+                    ui.add_space(10.0);
+                    ui.heading("Execution Trajectory Log");
+                    ui.group(|ui| {
+                        ui.monospace(serde_json::to_string_pretty(wf).unwrap_or_default());
+                    });
+                }
+            }
+            ActiveWorkspace::CadPlans => {
+                ui.heading("📐 Robot CAD Plans & Manufacturing BOM");
+                ui.label("Sovereign fabrication blueprints, DXF/SVG laser sheets, 3D printable STLs, and URDF kinematics.");
+                ui.separator();
+
+                ui.horizontal(|ui| {
+                    if ui.selectable_label(self.selected_robot == "saschibot", "Saschibot CAD").clicked() {
+                        self.selected_robot = "saschibot".to_string();
+                        self.fetch_cad();
+                    }
+                    if ui.selectable_label(self.selected_robot == "nori_a3", "NoriRobotics A3 CAD").clicked() {
+                        self.selected_robot = "nori_a3".to_string();
+                        self.fetch_cad();
+                    }
+                    if ui.selectable_label(self.selected_robot == "noetix_bumi", "Noetix Bumi CAD").clicked() {
+                        self.selected_robot = "noetix_bumi".to_string();
+                        self.fetch_cad();
+                    }
+                });
+
+                ui.add_space(8.0);
+                if let Some(ref cad) = self.cad_plan_data {
+                    ui.group(|ui| {
+                        ui.colored_label(cyan, format!("CAD PLAN FOR: {}", self.selected_robot.to_uppercase()));
+                        ui.monospace(serde_json::to_string_pretty(cad).unwrap_or_default());
+                    });
+                } else {
+                    ui.label("Loading CAD plan data...");
+                }
+            }
             ActiveWorkspace::Dashboard => {
                 ui.horizontal(|ui| {
                     ui.heading("📊 Real-Time Robot Telemetry");
@@ -373,6 +592,9 @@ impl eframe::App for RobotCraftGui {
                 ui.separator();
 
                 let robots = [
+                    ("saschibot", "Saschibot Mobile Service Bot P6", "Mobile Bimanual", "14-DOF", "Micro-ROS / STS3215"),
+                    ("nori_a3", "NoriRobotics A3 Mobile Manipulator", "Wheeled Arm", "16-DOF", "ROS2 DDS / Feetech"),
+                    ("noetix_bumi", "Noetix Bumi Humanoid", "Biped Humanoid", "21-DOF", "rosbridge / Jetson Orin"),
                     ("unitree_go2", "Unitree Go2 Pro", "Quadruped", "12-DOF", "UDP / CycloneDDS"),
                     ("yahboom_rover", "Yahboom ROSMASTER X3", "Rover", "4-DOF", "Serial UART / Jetbot"),
                     ("craftarm_6dof", "CraftArm Industrial Manipulator", "Arm", "6-DOF", "CAN Bus / Micro-ROS"),

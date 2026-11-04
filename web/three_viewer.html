@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RobotCraft 3D Viewer — Saschibot, NoriRobotics A3, Noetix Bumi</title>
+    <style>
+        :root {
+            --bg-color: #0b0f17;
+            --panel-bg: rgba(19, 27, 42, 0.94);
+            --border-color: #334155;
+            --text-color: #f8fafc;
+            --text-dim: #94a3b8;
+            --accent: #06b6d4;
+            --accent-hover: #0891b2;
+            --ok: #10b981;
+            --gold: #f59e0b;
+            --purple: #a855f7;
+            --danger: #ef4444;
+        }
+
+        [data-theme="light"] {
+            --bg-color: #f1f5f9;
+            --panel-bg: rgba(255, 255, 255, 0.96);
+            --border-color: #cbd5e1;
+            --text-color: #0f172a;
+            --text-dim: #475569;
+            --accent: #0284c7;
+            --accent-hover: #0369a1;
+            --ok: #059669;
+            --gold: #d97706;
+            --purple: #9333ea;
+            --danger: #dc2626;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        #topbar {
+            position: absolute;
+            top: 14px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .brand-card {
+            pointer-events: auto;
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            backdrop-filter: blur(8px);
+            padding: 10px 18px;
+            border-radius: 10px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-title {
+            font-size: 16px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            color: var(--accent);
+        }
+
+        .brand-badge {
+            background: rgba(6, 182, 212, 0.15);
+            color: var(--accent);
+            border: 1px solid var(--accent);
+            font-size: 11px;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 5px;
+        }
+
+        .btn {
+            background: rgba(51, 65, 85, 0.7);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            padding: 7px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.15s ease;
+            pointer-events: auto;
+        }
+
+        .btn:hover {
+            background: var(--accent);
+            color: #ffffff;
+            border-color: var(--accent);
+        }
+
+        .btn-active {
+            background: var(--accent) !important;
+            color: #ffffff !important;
+            border-color: var(--accent) !important;
+        }
+
+        .sidebar {
+            position: absolute;
+            top: 75px;
+            bottom: 20px;
+            width: 320px;
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            backdrop-filter: blur(8px);
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+            z-index: 10;
+            overflow-y: auto;
+        }
+
+        #left-panel { left: 20px; }
+        #right-panel { right: 20px; width: 340px; }
+
+        .panel-title {
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-dim);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 6px;
+            margin-bottom: 4px;
+        }
+
+        .robot-picker {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 8px;
+        }
+
+        .robot-btn {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 12px;
+            background: rgba(30, 41, 59, 0.7);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            cursor: pointer;
+            color: var(--text-color);
+            text-align: left;
+            transition: all 0.15s ease;
+        }
+
+        .robot-btn:hover {
+            border-color: var(--accent);
+            background: rgba(6, 182, 212, 0.1);
+        }
+
+        .robot-btn.active {
+            border-color: var(--accent);
+            background: rgba(6, 182, 212, 0.2);
+            font-weight: 700;
+        }
+
+        .ai-action-btn {
+            display: block;
+            width: 100%;
+            padding: 9px 12px;
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid var(--ok);
+            color: var(--ok);
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 12px;
+            margin-top: 6px;
+            text-align: center;
+            transition: all 0.15s;
+        }
+
+        .ai-action-btn:hover {
+            background: var(--ok);
+            color: #ffffff;
+        }
+
+        .cad-box {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px;
+            font-size: 12px;
+            line-height: 1.5;
+            font-family: monospace;
+            max-height: 220px;
+            overflow-y: auto;
+        }
+
+        .status-chip {
+            display: inline-block;
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--gold);
+            border: 1px solid var(--gold);
+        }
+    </style>
+    <!-- Three.js + OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body data-theme="dark">
+    <div id="topbar">
+        <div class="brand-card">
+            <span class="brand-title">🤖 ROBOTCRAFT 3D STUDIO</span>
+            <span class="brand-badge">THREE.JS VIRTUAL SPACE</span>
+            <span style="font-size: 12px; color: var(--text-dim);">Port 14116</span>
+        </div>
+        <div style="display: flex; gap: 8px; pointer-events: auto;">
+            <button class="btn" id="btn-theme">🌓 Theme</button>
+            <button class="btn" id="btn-reset-cam">🎥 Reset View</button>
+        </div>
+    </div>
+
+    <!-- Left Controls: Robot Selection & AI Motion Workflows -->
+    <div class="sidebar" id="left-panel">
+        <div class="panel-title">Robot Selector</div>
+        <div class="robot-picker">
+            <button class="robot-btn active" id="btn-saschi" onclick="switchRobot('saschibot')">
+                <div>
+                    <div><strong>Saschibot Mobile P6</strong></div>
+                    <div style="font-size: 11px; color: var(--text-dim);">14-DOF Bimanual + Mast Lift</div>
+                </div>
+                <span class="status-chip">STS3215</span>
+            </button>
+            <button class="robot-btn" id="btn-nori" onclick="switchRobot('nori_a3')">
+                <div>
+                    <div><strong>NoriRobotics A3</strong></div>
+                    <div style="font-size: 11px; color: var(--text-dim);">16-DOF Mobile Manipulator</div>
+                </div>
+                <span class="status-chip">RPLiDar C1</span>
+            </button>
+            <button class="robot-btn" id="btn-bumi" onclick="switchRobot('noetix_bumi')">
+                <div>
+                    <div><strong>Noetix Bumi</strong></div>
+                    <div style="font-size: 11px; color: var(--text-dim);">21-DOF Bipedal Humanoid</div>
+                </div>
+                <span class="status-chip">Jetson Orin</span>
+            </button>
+        </div>
+
+        <div class="panel-title" style="margin-top: 10px;">AI Behavior Workflows</div>
+        <div id="ai-workflow-container">
+            <button class="ai-action-btn" onclick="triggerWorkflow('wave')">👋 AI Wave & Greet</button>
+            <button class="ai-action-btn" onclick="triggerWorkflow('explore')">🗺️ AI SLAM Explore & Map</button>
+            <button class="ai-action-btn" onclick="triggerWorkflow('bimanual')">📦 AI Bimanual Caddy Pickup</button>
+            <button class="ai-action-btn" onclick="triggerWorkflow('balance')">⚖️ AI ZMP Inverted Pendulum Stand</button>
+        </div>
+
+        <div style="margin-top: auto; font-size: 11px; color: var(--text-dim); line-height: 1.4;">
+            <div>● Direct Simulation: Three.js Realtime Mesh Engine</div>
+            <div>● Stigmergic Kinematics Bus @ Port 14116</div>
+        </div>
+    </div>
+
+    <!-- Right Controls: CAD Plans & Manufacturing Inspection -->
+    <div class="sidebar" id="right-panel">
+        <div class="panel-title">CAD Plans & Geometry</div>
+        <div id="cad-info" class="cad-box">
+            Loading CAD specifications...
+        </div>
+
+        <div class="panel-title" style="margin-top: 10px;">Joint Telemetry & Kinematics</div>
+        <div id="telemetry-box" class="cad-box" style="font-size: 11px;">
+            Telemetry active.
+        </div>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <script>
+        if (typeof THREE === "undefined") {
+            document.body.innerHTML = "<div style='color:red;padding:40px;font-family:sans-serif;'><h2>Three.js CDN failed to load. Check network connection.</h2></div>";
+            throw new Error("Three.js missing");
+        }
+
+        // --- Three.js Setup ---
+        const container = document.getElementById("canvas-container");
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0b0f17);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(2.4, -2.1, 1.8);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.target.set(0, 0, 0.8);
+        controls.update();
+
+        // Up is Z in Robotics/ROS kinematics
+        THREE.Object3D.DefaultUp.set(0, 0, 1);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.85);
+        dirLight.position.set(5, -5, 8);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        // Grid floor
+        const gridHelper = new THREE.GridHelper(10, 20, 0x06b6d4, 0x1e293b);
+        gridHelper.rotation.x = Math.PI / 2;
+        scene.add(gridHelper);
+
+        // Robot Groups
+        let activeRobotId = "saschibot";
+        let activeRobotGroup = new THREE.Group();
+        scene.add(activeRobotGroup);
+
+        // Animated nodes references
+        let animNodes = {};
+        let activeWorkflow = null;
+        let workflowStartTime = 0;
+
+        // --- BUILD SASCHIBOT (Mobile Service Bot P6) ---
+        function buildSaschibot() {
+            const root = new THREE.Group();
+            root.name = "saschibot_root";
+
+            // Base deck (680x540mm)
+            const deckGeo = new THREE.BoxGeometry(0.68, 0.54, 0.06);
+            const deckMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.4, metalness: 0.6 });
+            const deck = new THREE.Mesh(deckGeo, deckMat);
+            deck.position.set(0, 0, 0.12);
+            deck.castShadow = true;
+            root.add(deck);
+
+            // Left/Right Wheels
+            const wheelGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.04, 24);
+            const wheelMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 });
+            const wheelL = new THREE.Mesh(wheelGeo, wheelMat);
+            wheelL.rotation.z = Math.PI / 2;
+            wheelL.position.set(0, 0.26, 0.08);
+            root.add(wheelL);
+
+            const wheelR = new THREE.Mesh(wheelGeo, wheelMat);
+            wheelR.rotation.z = Math.PI / 2;
+            wheelR.position.set(0, -0.26, 0.08);
+            root.add(wheelR);
+
+            // 3-Stage Mast Column (280x280mm flange)
+            const mastGeo = new THREE.BoxGeometry(0.14, 0.14, 0.75);
+            const mastMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.7, roughness: 0.3 });
+            const mast = new THREE.Mesh(mastGeo, mastMat);
+            mast.position.set(0, 0, 0.52);
+            root.add(mast);
+
+            // Telescoping Stage 2 & 3
+            const liftGroup = new THREE.Group();
+            liftGroup.position.set(0, 0, 0.85);
+
+            // Landscape Head (130x210x150mm)
+            const headGeo = new THREE.BoxGeometry(0.21, 0.13, 0.15);
+            const headMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.2, metalness: 0.8 });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.set(0, 0, 0.25);
+            liftGroup.add(head);
+
+            // Visor (Acrylic smoked bezel 180x110mm)
+            const visorGeo = new THREE.BoxGeometry(0.18, 0.02, 0.11);
+            const visorMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.1, metalness: 0.9 });
+            const visor = new THREE.Mesh(visorGeo, visorMat);
+            visor.position.set(0, 0.07, 0.25);
+            liftGroup.add(visor);
+
+            // Dual Bimanual Arms (STS3215 Servos + Robonine Grippers)
+            function createArm(isLeft) {
+                const armGroup = new THREE.Group();
+                const sign = isLeft ? 1 : -1;
+                armGroup.position.set(0, sign * 0.16, 0.15);
+
+                const shoulderGeo = new THREE.SphereGeometry(0.045, 16, 16);
+                const armMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.3, metalness: 0.5 });
+                const shoulder = new THREE.Mesh(shoulderGeo, armMat);
+                armGroup.add(shoulder);
+
+                const bicepGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.24, 16);
+                const bicep = new THREE.Mesh(bicepGeo, armMat);
+                bicep.position.set(0, 0, -0.12);
+                armGroup.add(bicep);
+
+                const elbowGroup = new THREE.Group();
+                elbowGroup.position.set(0, 0, -0.24);
+
+                const forearmGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.22, 16);
+                const forearm = new THREE.Mesh(forearmGeo, armMat);
+                forearm.position.set(0, 0, -0.11);
+                elbowGroup.add(forearm);
+
+                // Robonine 84mm parallel gripper
+                const gripGeo = new THREE.BoxGeometry(0.06, 0.084, 0.04);
+                const gripMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.8 });
+                const grip = new THREE.Mesh(gripGeo, gripMat);
+                grip.position.set(0, 0, -0.23);
+                elbowGroup.add(grip);
+
+                armGroup.add(elbowGroup);
+                return { armGroup, elbowGroup, grip };
+            }
+
+            const armL = createArm(true);
+            const armR = createArm(false);
+            liftGroup.add(armL.armGroup);
+            liftGroup.add(armR.armGroup);
+
+            root.add(liftGroup);
+
+            animNodes = {
+                root: root,
+                wheelL: wheelL,
+                wheelR: wheelR,
+                lift: liftGroup,
+                armL_shoulder: armL.armGroup,
+                armL_elbow: armL.elbowGroup,
+                armL_grip: armL.grip,
+                armR_shoulder: armR.armGroup,
+                armR_elbow: armR.elbowGroup,
+                armR_grip: armR.grip,
+            };
+
+            return root;
+        }
+
+        // --- BUILD NORIROBOTICS A3 (Mobile Manipulator) ---
+        function buildNoriA3() {
+            const root = new THREE.Group();
+            root.name = "nori_a3_root";
+
+            // Molded Base Shell
+            const baseGeo = new THREE.CylinderGeometry(0.24, 0.26, 0.16, 32);
+            const baseMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2, metalness: 0.3 });
+            const base = new THREE.Mesh(baseGeo, baseMat);
+            base.position.set(0, 0, 0.12);
+            base.castShadow = true;
+            root.add(base);
+
+            // RPLiDar C1 Dome
+            const lidarGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.04, 24);
+            const lidarMat = new THREE.MeshStandardMaterial({ color: 0x06b6d4, roughness: 0.1, metalness: 0.9 });
+            const lidar = new THREE.Mesh(lidarGeo, lidarMat);
+            lidar.position.set(0.12, 0, 0.22);
+            root.add(lidar);
+
+            // Torso column with ear pucks and head pegs
+            const torsoGeo = new THREE.BoxGeometry(0.18, 0.22, 0.50);
+            const torsoMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.3 });
+            const torso = new THREE.Mesh(torsoGeo, torsoMat);
+            torso.position.set(0, 0, 0.45);
+            root.add(torso);
+
+            // Ear pucks (Printables)
+            const earGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.02, 16);
+            const earMat = new THREE.MeshStandardMaterial({ color: 0x06b6d4 });
+            const earL = new THREE.Mesh(earGeo, earMat);
+            earL.rotation.x = Math.PI / 2;
+            earL.position.set(0, 0.12, 0.65);
+            root.add(earL);
+
+            const earR = new THREE.Mesh(earGeo, earMat);
+            earR.rotation.x = Math.PI / 2;
+            earR.position.set(0, -0.12, 0.65);
+            root.add(earR);
+
+            // Feetech Servo Arm Left & Right
+            function createNoriArm(isLeft) {
+                const group = new THREE.Group();
+                const sign = isLeft ? 1 : -1;
+                group.position.set(0, sign * 0.14, 0.60);
+
+                const armMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, metalness: 0.6, roughness: 0.3 });
+                const bicep = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.20, 16), armMat);
+                bicep.position.set(0, 0, -0.10);
+                group.add(bicep);
+
+                const elbow = new THREE.Group();
+                elbow.position.set(0, 0, -0.20);
+                const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.18, 16), armMat);
+                forearm.position.set(0, 0, -0.09);
+                elbow.add(forearm);
+
+                // Gripper attachment point (STEP file geometry)
+                const grip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.06, 0.04), new THREE.MeshStandardMaterial({ color: 0x1e293b }));
+                grip.position.set(0, 0, -0.20);
+                elbow.add(grip);
+
+                group.add(elbow);
+                return { group, elbow, grip };
+            }
+
+            const armL = createNoriArm(true);
+            const armR = createNoriArm(false);
+            root.add(armL.group);
+            root.add(armR.group);
+
+            animNodes = {
+                root: root,
+                lidar: lidar,
+                armL_shoulder: armL.group,
+                armL_elbow: armL.elbow,
+                armL_grip: armL.grip,
+                armR_shoulder: armR.group,
+                armR_elbow: armR.elbow,
+                armR_grip: armR.grip,
+            };
+
+            return root;
+        }
+
+        // --- BUILD NOETIX BUMI (21-DOF Humanoid) ---
+        function buildNoetixBumi() {
+            const root = new THREE.Group();
+            root.name = "noetix_bumi_root";
+
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0xededed, roughness: 0.3, metalness: 0.4 });
+            const jointMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.8, roughness: 0.2 });
+            const accentMat = new THREE.MeshStandardMaterial({ color: 0xa855f7, roughness: 0.2, metalness: 0.6 });
+
+            // Pelvis
+            const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.14, 0.10), bodyMat);
+            pelvis.position.set(0, 0, 0.65);
+            root.add(pelvis);
+
+            // Torso & Lumbar
+            const torso = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.16, 0.26), bodyMat);
+            torso.position.set(0, 0, 0.85);
+            root.add(torso);
+
+            // Head (Wake word 'Bumi Bumi' + RGB Camera)
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.08, 24, 24), bodyMat);
+            head.position.set(0, 0, 1.05);
+            root.add(head);
+
+            const camVisor = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.04, 0.03), accentMat);
+            camVisor.position.set(0.06, 0, 1.05);
+            root.add(camVisor);
+
+            // 6-DOF Left & Right Legs
+            function createLeg(isLeft) {
+                const hip = new THREE.Group();
+                const sign = isLeft ? 1 : -1;
+                hip.position.set(0, sign * 0.08, 0.62);
+
+                const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.26, 16), bodyMat);
+                thigh.position.set(0, 0, -0.13);
+                hip.add(thigh);
+
+                const knee = new THREE.Group();
+                knee.position.set(0, 0, -0.26);
+
+                const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.025, 0.26, 16), bodyMat);
+                shin.position.set(0, 0, -0.13);
+                knee.add(shin);
+
+                const foot = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.07, 0.03), jointMat);
+                foot.position.set(0.03, 0, -0.27);
+                knee.add(foot);
+
+                hip.add(knee);
+                return { hip, knee, foot };
+            }
+
+            // Arms (3-DOF each)
+            function createBumiArm(isLeft) {
+                const shoulder = new THREE.Group();
+                const sign = isLeft ? 1 : -1;
+                shoulder.position.set(0, sign * 0.13, 0.95);
+
+                const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.022, 0.18, 16), bodyMat);
+                upper.position.set(0, 0, -0.09);
+                shoulder.add(upper);
+
+                const elbow = new THREE.Group();
+                elbow.position.set(0, 0, -0.18);
+                const fore = new THREE.Mesh(new THREE.CylinderGeometry(0.020, 0.018, 0.16, 16), bodyMat);
+                fore.position.set(0, 0, -0.08);
+                elbow.add(fore);
+
+                shoulder.add(elbow);
+                return { shoulder, elbow };
+            }
+
+            const legL = createLeg(true);
+            const legR = createLeg(false);
+            const armL = createBumiArm(true);
+            const armR = createBumiArm(false);
+
+            root.add(legL.hip);
+            root.add(legR.hip);
+            root.add(armL.shoulder);
+            root.add(armR.shoulder);
+
+            animNodes = {
+                root: root,
+                pelvis: pelvis,
+                torso: torso,
+                head: head,
+                legL_hip: legL.hip,
+                legL_knee: legL.knee,
+                legR_hip: legR.hip,
+                legR_knee: legR.knee,
+                armL_shoulder: armL.shoulder,
+                armL_elbow: armL.elbow,
+                armR_shoulder: armR.shoulder,
+                armR_elbow: armR.elbow,
+            };
+
+            return root;
+        }
+
+        // Switch displayed robot
+        function switchRobot(robotId) {
+            activeRobotId = robotId;
+            document.querySelectorAll(".robot-btn").forEach(b => b.classList.remove("active"));
+            if (robotId === "saschibot") document.getElementById("btn-saschi").classList.add("active");
+            if (robotId === "nori_a3") document.getElementById("btn-nori").classList.add("active");
+            if (robotId === "noetix_bumi") document.getElementById("btn-bumi").classList.add("active");
+
+            scene.remove(activeRobotGroup);
+            if (robotId === "saschibot") activeRobotGroup = buildSaschibot();
+            else if (robotId === "nori_a3") activeRobotGroup = buildNoriA3();
+            else if (robotId === "noetix_bumi") activeRobotGroup = buildNoetixBumi();
+            scene.add(activeRobotGroup);
+
+            updateCadInfo(robotId);
+        }
+
+        // CAD Plans display
+        function updateCadInfo(robotId) {
+            const cadBox = document.getElementById("cad-info");
+            const telemBox = document.getElementById("telemetry-box");
+
+            if (robotId === "saschibot") {
+                cadBox.innerHTML = `<strong>Saschibot Mobile P6 CAD:</strong><br>
+                • 01_base_deck_680x540mm.svg (18 profiles)<br>
+                • 02_column_pedestal_flange_280x280mm.svg<br>
+                • 03_head_visor_bezel_180x110mm.svg<br>
+                • 04_dock_pad_and_tag_plate_600x600mm.svg<br>
+                • 10 STL Modules: STS3215 cradle, Robonine 84mm parallel jaws, caddy receiver`;
+                telemBox.innerHTML = `<strong>Saschibot Telemetry:</strong><br>
+                • Protocol: Micro-ROS / STS3215 Bus<br>
+                • Battery: 94.2% (LiFePO4 24V)<br>
+                • Motors: 14 Channels Active (31°C avg)`;
+            } else if (robotId === "nori_a3") {
+                cadBox.innerHTML = `<strong>NoriRobotics A3 CAD:</strong><br>
+                • nori_a3_rig.glb & nori_a3_posed.glb<br>
+                • nori.expanded.urdf (Full kinematics model)<br>
+                • Printables: ear-pucks.stl, head-pegs.stl<br>
+                • STEP: gripper-attachment-points.step<br>
+                • Meshes: base_shell, shoulder, elbow, RPLiDar C1`;
+                telemBox.innerHTML = `<strong>Nori A3 Telemetry:</strong><br>
+                • Protocol: ROS 2 DDS / Feetech<br>
+                • Battery: 88.0%<br>
+                • LIDAR: 600 RPM Active Scanning`;
+            } else if (robotId === "noetix_bumi") {
+                cadBox.innerHTML = `<strong>Noetix Bumi CAD & Topology:</strong><br>
+                • Kinematics: 21-DOF Bipedal Architecture<br>
+                • Height: 1200mm | Mass: 18.5kg | Arms: 3.5kg payload<br>
+                • Topologies: 6-DOF per leg (hip/knee/ankle/toe)<br>
+                • 3-DOF per arm, 1-DOF lumbar, 2-DOF head<br>
+                • Status: Sovereign URDF extracted from vendor spec`;
+                telemBox.innerHTML = `<strong>Noetix Bumi Telemetry:</strong><br>
+                • Protocol: rosbridge /ws (:9090)<br>
+                • Brain: Jetson Orin<br>
+                • Wake Word: "Bumi Bumi" Active`;
+            }
+        }
+
+        // AI Behavior Workflows
+        function triggerWorkflow(wfType) {
+            activeWorkflow = wfType;
+            workflowStartTime = performance.now();
+        }
+
+        // Reset Camera
+        document.getElementById("btn-reset-cam").addEventListener("click", () => {
+            camera.position.set(2.4, -2.1, 1.8);
+            controls.target.set(0, 0, 0.8);
+            controls.update();
+        });
+
+        // Theme Toggle
+        document.getElementById("btn-theme").addEventListener("click", () => {
+            const isDark = document.body.getAttribute("data-theme") === "dark";
+            const nextTheme = isDark ? "light" : "dark";
+            document.body.setAttribute("data-theme", nextTheme);
+            scene.background = new THREE.Color(nextTheme === "dark" ? 0x0b0f17 : 0xf1f5f9);
+        });
+
+        // Animation Loop
+        function animate(timestamp) {
+            requestAnimationFrame(animate);
+
+            const elapsedSec = (timestamp - workflowStartTime) / 1000;
+
+            // Continuous idle animations
+            if (activeRobotId === "saschibot") {
+                if (animNodes.wheelL) animNodes.wheelL.rotation.y += 0.01;
+                if (animNodes.wheelR) animNodes.wheelR.rotation.y += 0.01;
+            } else if (activeRobotId === "nori_a3") {
+                if (animNodes.lidar) animNodes.lidar.rotation.z += 0.1;
+            }
+
+            // AI Workflow Trajectories in Virtual Space
+            if (activeWorkflow === "wave") {
+                if (animNodes.armL_shoulder && animNodes.armL_elbow) {
+                    animNodes.armL_shoulder.rotation.x = -1.2 + 0.3 * Math.sin(elapsedSec * 4.0);
+                    animNodes.armL_elbow.rotation.x = -0.8 + 0.4 * Math.cos(elapsedSec * 4.0);
+                }
+            } else if (activeWorkflow === "explore") {
+                // Autonomous movement through virtual room
+                const angle = elapsedSec * 0.8;
+                activeRobotGroup.position.x = 0.8 * Math.cos(angle);
+                activeRobotGroup.position.y = 0.8 * Math.sin(angle);
+                activeRobotGroup.rotation.z = angle + Math.PI / 2;
+            } else if (activeWorkflow === "bimanual") {
+                if (animNodes.lift) animNodes.lift.position.z = 0.85 + 0.15 * Math.sin(elapsedSec * 2.0);
+                if (animNodes.armL_shoulder && animNodes.armR_shoulder) {
+                    animNodes.armL_shoulder.rotation.x = 0.4 * Math.sin(elapsedSec * 2.0);
+                    animNodes.armR_shoulder.rotation.x = 0.4 * Math.sin(elapsedSec * 2.0);
+                }
+            } else if (activeWorkflow === "balance") {
+                // Bipedal inverted pendulum balancing sway
+                if (animNodes.pelvis) animNodes.pelvis.position.y = 0.02 * Math.sin(elapsedSec * 3.0);
+                if (animNodes.torso) animNodes.torso.rotation.x = 0.03 * Math.sin(elapsedSec * 3.0);
+                if (animNodes.legL_knee && animNodes.legR_knee) {
+                    animNodes.legL_knee.rotation.x = 0.1 + 0.05 * Math.sin(elapsedSec * 3.0);
+                    animNodes.legR_knee.rotation.x = 0.1 - 0.05 * Math.sin(elapsedSec * 3.0);
+                }
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener("resize", () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Initialize default view
+        switchRobot("saschibot");
+        requestAnimationFrame(animate);
+    </script>
+</body>
+</html>

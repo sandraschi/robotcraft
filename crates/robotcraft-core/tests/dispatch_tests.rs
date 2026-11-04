@@ -57,5 +57,38 @@ async fn test_robotcraft_telemetry_and_kinematics() -> Result<(), Box<dyn std::e
     assert_eq!(estop["emergency_stop"], "ACTIVATED");
     assert_eq!(estop["motors_disabled"], true);
 
+    // 6. Test Saschibot, Nori A3, and Noetix Bumi CAD plans and models
+    let saschi_cad = dispatch(Command::GetRobotCadPlan { robot_id: "saschibot".to_string() }, &store).await;
+    assert_eq!(saschi_cad["success"], true);
+    assert_eq!(saschi_cad["cad_type"], "URDF_DXF_SVG_STL");
+
+    let nori_cad = dispatch(Command::GetRobotCadPlan { robot_id: "nori_a3".to_string() }, &store).await;
+    assert_eq!(nori_cad["success"], true);
+    assert_eq!(nori_cad["cad_type"], "URDF_STEP_STL_GLB");
+
+    let bumi_cad = dispatch(Command::GetRobotCadPlan { robot_id: "noetix_bumi".to_string() }, &store).await;
+    assert_eq!(bumi_cad["success"], true);
+    assert_eq!(bumi_cad["cad_type"], "VENDOR_SPEC_KINEMATIC_TOPOLOGY");
+
+    // 7. Test AI Behavior Workflows
+    let wf_wave = dispatch(Command::RunAiBehaviorWorkflow {
+        robot_id: "saschibot".to_string(),
+        workflow_type: "wave_and_greet".to_string(),
+    }, &store).await;
+    assert_eq!(wf_wave["success"], true);
+    assert_eq!(wf_wave["virtual_space_simulation"], true);
+
+    let wf_explore = dispatch(Command::RunAiBehaviorWorkflow {
+        robot_id: "nori_a3".to_string(),
+        workflow_type: "explore_and_map".to_string(),
+    }, &store).await;
+    assert_eq!(wf_explore["success"], true);
+
+    let wf_stand = dispatch(Command::RunAiBehaviorWorkflow {
+        robot_id: "noetix_bumi".to_string(),
+        workflow_type: "stand_and_balance".to_string(),
+    }, &store).await;
+    assert_eq!(wf_stand["success"], true);
+
     Ok(())
 }
