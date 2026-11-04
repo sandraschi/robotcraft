@@ -8,6 +8,7 @@
 #![deny(clippy::unimplemented)]
 #![deny(clippy::todo)]
 
+pub mod i18n;
 pub mod kinematics;
 
 use crate::kinematics::KinematicsSolver;

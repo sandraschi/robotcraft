@@ -29,6 +29,7 @@ pub enum ActiveWorkspace {
 pub struct RobotCraftGui {
     pub store: Arc<DatabaseStore>,
     pub runtime: Arc<Runtime>,
+    pub locale: robotcraft_core::i18n::AppLocale,
     pub active_workspace: ActiveWorkspace,
     pub selected_robot: String,
     pub linear_x: f32,
@@ -59,6 +60,7 @@ impl RobotCraftGui {
         let mut app = Self {
             store,
             runtime,
+            locale: robotcraft_core::i18n::AppLocale::default(),
             active_workspace: ActiveWorkspace::ThreeJsViewer,
             selected_robot: "saschibot".to_string(),
             linear_x: 0.0,
@@ -253,6 +255,17 @@ impl eframe::App for RobotCraftGui {
                 });
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let cur_loc = self.locale;
+                    let label = format!("{} {}", cur_loc.flag(), cur_loc.code().to_uppercase());
+                    egui::ComboBox::from_id_salt("topbar_locale_selector")
+                        .selected_text(label)
+                        .show_ui(ui, |ui| {
+                            for loc_item in robotcraft_core::i18n::AppLocale::all() {
+                                let text = format!("{} {}", loc_item.flag(), loc_item.display_name());
+                                let _ = ui.selectable_value(&mut self.locale, *loc_item, text);
+                            }
+                        });
+
                     let (icon, label) = if self.is_dark_theme { ("☀", "Light") } else { ("🌙", "Dark") };
                     if ui.small_button(format!("{icon} {label}")).clicked() {
                         self.is_dark_theme = !self.is_dark_theme;
