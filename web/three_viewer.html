@@ -228,9 +228,19 @@
             border: 1px solid var(--gold);
         }
     </style>
-    <!-- Three.js + OrbitControls -->
+    <!-- Three.js + OrbitControls (CDN with fallback) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        if (typeof THREE === "undefined") {
+            document.write('<script src="https://unpkg.com/three@0.128.0/build/three.min.js"><\/script>');
+        }
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script>
+        if (typeof THREE !== "undefined" && typeof THREE.OrbitControls === "undefined") {
+            document.write('<script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"><\/script>');
+        }
+    </script>
 </head>
 <body data-theme="dark">
     <div id="topbar">
@@ -307,16 +317,20 @@
             throw new Error("Three.js missing");
         }
 
+        // Up is Z in Robotics/ROS kinematics (must be set BEFORE camera & controls)
+        THREE.Object3D.DefaultUp.set(0, 0, 1);
+
         // --- Three.js Setup ---
         const container = document.getElementById("canvas-container");
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x0b0f17);
 
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
-        camera.position.set(2.4, -2.1, 1.8);
+        camera.up.set(0, 0, 1);
+        camera.position.set(2.4, -2.1, 1.6);
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setPixelRatio(window.devicePixelRatio);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -325,11 +339,8 @@
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
-        controls.target.set(0, 0, 0.8);
+        controls.target.set(0, 0, 0.6);
         controls.update();
-
-        // Up is Z in Robotics/ROS kinematics
-        THREE.Object3D.DefaultUp.set(0, 0, 1);
 
         // Lighting
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
@@ -340,7 +351,7 @@
         dirLight.castShadow = true;
         scene.add(dirLight);
 
-        // Grid floor
+        // Ground Grid (in XY plane, Z=0)
         const gridHelper = new THREE.GridHelper(10, 20, 0x06b6d4, 0x1e293b);
         gridHelper.rotation.x = Math.PI / 2;
         scene.add(gridHelper);
@@ -368,16 +379,14 @@
             deck.castShadow = true;
             root.add(deck);
 
-            // Left/Right Wheels
+            // Left/Right Wheels (Axle along Y, Three.js Cylinder is naturally along Y)
             const wheelGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.04, 24);
             const wheelMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 });
             const wheelL = new THREE.Mesh(wheelGeo, wheelMat);
-            wheelL.rotation.z = Math.PI / 2;
             wheelL.position.set(0, 0.26, 0.08);
             root.add(wheelL);
 
             const wheelR = new THREE.Mesh(wheelGeo, wheelMat);
-            wheelR.rotation.z = Math.PI / 2;
             wheelR.position.set(0, -0.26, 0.08);
             root.add(wheelR);
 
@@ -419,6 +428,7 @@
 
                 const bicepGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.24, 16);
                 const bicep = new THREE.Mesh(bicepGeo, armMat);
+                bicep.rotation.x = Math.PI / 2;
                 bicep.position.set(0, 0, -0.12);
                 armGroup.add(bicep);
 
@@ -427,6 +437,7 @@
 
                 const forearmGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.22, 16);
                 const forearm = new THREE.Mesh(forearmGeo, armMat);
+                forearm.rotation.x = Math.PI / 2;
                 forearm.position.set(0, 0, -0.11);
                 elbowGroup.add(forearm);
 
@@ -469,55 +480,57 @@
             const root = new THREE.Group();
             root.name = "nori_a3_root";
 
-            // Molded Base Shell
+            // Molded Base Shell (Standing cylinder along Z)
             const baseGeo = new THREE.CylinderGeometry(0.24, 0.26, 0.16, 32);
             const baseMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2, metalness: 0.3 });
             const base = new THREE.Mesh(baseGeo, baseMat);
-            base.position.set(0, 0, 0.12);
+            base.rotation.x = Math.PI / 2;
+            base.position.set(0, 0, 0.08);
             base.castShadow = true;
             root.add(base);
 
-            // RPLiDar C1 Dome
+            // RPLiDar C1 Dome (Standing cylinder along Z)
             const lidarGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.04, 24);
             const lidarMat = new THREE.MeshStandardMaterial({ color: 0x06b6d4, roughness: 0.1, metalness: 0.9 });
             const lidar = new THREE.Mesh(lidarGeo, lidarMat);
-            lidar.position.set(0.12, 0, 0.22);
+            lidar.rotation.x = Math.PI / 2;
+            lidar.position.set(0.12, 0, 0.18);
             root.add(lidar);
 
             // Torso column with ear pucks and head pegs
             const torsoGeo = new THREE.BoxGeometry(0.18, 0.22, 0.50);
             const torsoMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.3 });
             const torso = new THREE.Mesh(torsoGeo, torsoMat);
-            torso.position.set(0, 0, 0.45);
+            torso.position.set(0, 0, 0.41);
             root.add(torso);
 
-            // Ear pucks (Printables)
+            // Ear pucks (Printables - discs facing outward along Y)
             const earGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.02, 16);
             const earMat = new THREE.MeshStandardMaterial({ color: 0x06b6d4 });
             const earL = new THREE.Mesh(earGeo, earMat);
-            earL.rotation.x = Math.PI / 2;
-            earL.position.set(0, 0.12, 0.65);
+            earL.position.set(0, 0.12, 0.61);
             root.add(earL);
 
             const earR = new THREE.Mesh(earGeo, earMat);
-            earR.rotation.x = Math.PI / 2;
-            earR.position.set(0, -0.12, 0.65);
+            earR.position.set(0, -0.12, 0.61);
             root.add(earR);
 
             // Feetech Servo Arm Left & Right
             function createNoriArm(isLeft) {
                 const group = new THREE.Group();
                 const sign = isLeft ? 1 : -1;
-                group.position.set(0, sign * 0.14, 0.60);
+                group.position.set(0, sign * 0.14, 0.56);
 
                 const armMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, metalness: 0.6, roughness: 0.3 });
                 const bicep = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.20, 16), armMat);
+                bicep.rotation.x = Math.PI / 2;
                 bicep.position.set(0, 0, -0.10);
                 group.add(bicep);
 
                 const elbow = new THREE.Group();
                 elbow.position.set(0, 0, -0.20);
                 const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.18, 16), armMat);
+                forearm.rotation.x = Math.PI / 2;
                 forearm.position.set(0, 0, -0.09);
                 elbow.add(forearm);
 
@@ -577,13 +590,14 @@
             camVisor.position.set(0.06, 0, 1.05);
             root.add(camVisor);
 
-            // 6-DOF Left & Right Legs
+            // 6-DOF Left & Right Legs (standing upright on ground)
             function createLeg(isLeft) {
                 const hip = new THREE.Group();
                 const sign = isLeft ? 1 : -1;
-                hip.position.set(0, sign * 0.08, 0.62);
+                hip.position.set(0, sign * 0.08, 0.56);
 
                 const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.26, 16), bodyMat);
+                thigh.rotation.x = Math.PI / 2;
                 thigh.position.set(0, 0, -0.13);
                 hip.add(thigh);
 
@@ -591,11 +605,12 @@
                 knee.position.set(0, 0, -0.26);
 
                 const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.025, 0.26, 16), bodyMat);
+                shin.rotation.x = Math.PI / 2;
                 shin.position.set(0, 0, -0.13);
                 knee.add(shin);
 
-                const foot = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.07, 0.03), jointMat);
-                foot.position.set(0.03, 0, -0.27);
+                const foot = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.07, 0.04), jointMat);
+                foot.position.set(0.03, 0, -0.28);
                 knee.add(foot);
 
                 hip.add(knee);
@@ -606,15 +621,17 @@
             function createBumiArm(isLeft) {
                 const shoulder = new THREE.Group();
                 const sign = isLeft ? 1 : -1;
-                shoulder.position.set(0, sign * 0.13, 0.95);
+                shoulder.position.set(0, sign * 0.13, 0.90);
 
                 const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.022, 0.18, 16), bodyMat);
+                upper.rotation.x = Math.PI / 2;
                 upper.position.set(0, 0, -0.09);
                 shoulder.add(upper);
 
                 const elbow = new THREE.Group();
                 elbow.position.set(0, 0, -0.18);
                 const fore = new THREE.Mesh(new THREE.CylinderGeometry(0.020, 0.018, 0.16, 16), bodyMat);
+                fore.rotation.x = Math.PI / 2;
                 fore.position.set(0, 0, -0.08);
                 elbow.add(fore);
 
@@ -716,8 +733,9 @@
 
         // Reset Camera
         document.getElementById("btn-reset-cam").addEventListener("click", () => {
-            camera.position.set(2.4, -2.1, 1.8);
-            controls.target.set(0, 0, 0.8);
+            camera.up.set(0, 0, 1);
+            camera.position.set(2.4, -2.1, 1.6);
+            controls.target.set(0, 0, 0.6);
             controls.update();
         });
 
