@@ -3,7 +3,7 @@
 **RobotCraft** is the embodied intelligence studio and universal robotics operating workstation for the sandraschi fleet. It consolidates hardware telemetry, forward/inverse kinematics solvers, URDF models, Gazebo simulation bridges, and physical actuator tele-op.
 
 ## Architecture
-- **Consolidates Fleet Repos**: `robotics-mcp`, `ros-mcp`, `gazebo-mcp`, `unitree-mcp`, `yahboom-mcp`, `limx`, `norirobotics`, `vbot`.
+- **Consolidates Fleet Repos**: `robotics-mcp`, `ros-mcp`, `gazebo-mcp`, `unitree-mcp`, `yahboom-mcp`, `limx`, `nori` (`norirobotics-mcp`: Nori A3 home robot, LeRobot recording, VR spawn), `vbot`, `rust-saschirob-mcp` (personal robotics cookbook).
 - **Universal 3-Tier ArtCraft Standard**:
   - `crates/robotcraft-hal`: Hardware Abstraction Layer (Unitree UDP, Yahboom serial, ROS 2 DDS, Gazebo).
   - `crates/robotcraft-core`: Kinematics solvers, URDF link trees, and Command Bus (`Command::dispatch`).
