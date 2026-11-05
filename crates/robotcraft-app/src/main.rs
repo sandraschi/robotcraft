@@ -569,6 +569,12 @@ impl eframe::App for RobotCraftGui {
                     self.viewer_pitch = (self.viewer_pitch + delta.y * 0.012).clamp(-1.45, 1.45);
                 }
 
+                // Wheel zoom (hover the viewport; matches Zoom slider 0.4..=2.5)
+                let wheel = ui.input(|i| i.smooth_scroll_delta.y);
+                if vp_response.hovered() && wheel != 0.0 {
+                    self.viewer_zoom = (self.viewer_zoom * (1.0 + wheel * 0.0015)).clamp(0.4, 2.5);
+                }
+
                 if self.viewer_auto_rotate {
                     self.viewer_yaw += 0.015;
                     ui.ctx().request_repaint();
