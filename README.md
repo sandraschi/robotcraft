@@ -10,3 +10,7 @@
   - `crates/robotcraft-mcp`: Stdio JSON-RPC server (MCP 2024-11-05) + CLI (`robotcraft-cli`).
   - `crates/robotcraft-app`: Immediate-mode Native Studio GUI (`robotcraft`).
 - **Standard Control Port**: `14116`.
+
+## Lineage — the Storytold craft-app pattern
+
+Storytold ArtCraft ([storytold/artcraft](https://github.com/storytold/artcraft) — "the IDE for artists") was the starting point. The 16 craft apps in the Storytold stable each ship one binary that is both the human CLI and the agent MCP server (stdio), headless-first, with `run.json` + report artifacts. That modus operandi and harness is what this repo implements; the code here is independent, the pattern is shared.
