@@ -11,6 +11,17 @@
   - `crates/robotcraft-app`: Immediate-mode Native Studio GUI (`robotcraft`).
 - **Standard Control Port**: `14116`.
 
+## Status — does today / next week / non-goals
+
+**Does today:** 4-crate Rust workspace (core/HAL split) + web viewer;
+URDF/FK/IK verbs declared; 3D viewer rendering landed; 2 test fns.
+
+**Next week:** PRD (HAL traits, sim choice, tele-op confirm gates,
+voice-bus paragraph); FK/IK fixture tests (sim-only CI); fk-sim recipe.
+
+**Non-goals:** no physical actuation without confirm gates; hardware
+matrix stays gated, never mock-green.
+
 ## Lineage — the Storytold craft-app pattern
 
 Storytold ArtCraft ([storytold/artcraft](https://github.com/storytold/artcraft) — "the IDE for artists") was the starting point. The 16 craft apps in the Storytold stable each ship one binary that is both the human CLI and the agent MCP server (stdio), headless-first, with `run.json` + report artifacts. That modus operandi and harness is what this repo implements; the code here is independent, the pattern is shared.
