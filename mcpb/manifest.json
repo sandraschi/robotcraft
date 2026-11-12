@@ -1,0 +1,53 @@
+{
+  "manifest_version": "0.2",
+  "name": "robotcraft",
+  "display_name": "RobotCraft",
+  "version": "__VERSION__",
+  "description": "RobotCraft MCP server (5 tools).",
+  "author": {
+    "name": "Sandra Schipal",
+    "url": "https://github.com/sandraschi"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sandraschi/robotcraft"
+  },
+  "license": "MIT",
+  "server": {
+    "type": "binary",
+    "entry_point": "robotcraft-cli.exe",
+    "mcp_config": {
+      "command": "${__dirname}/robotcraft-cli.exe",
+      "args": [
+        "--mcp"
+      ]
+    }
+  },
+  "compatibility": {
+    "platforms": [
+      "win32"
+    ]
+  },
+  "tools": [
+    {
+      "name": "robot_status",
+      "description": "Check RobotCraft status and active drivers"
+    },
+    {
+      "name": "robot_list",
+      "description": "List supported robot hardware platforms"
+    },
+    {
+      "name": "robot_telemetry",
+      "description": "Fetch real-time robot battery, motors, and velocity metrics"
+    },
+    {
+      "name": "robot_teleop",
+      "description": "Dispatch linear and angular twist velocities to robot base"
+    },
+    {
+      "name": "robot_estop",
+      "description": "Activate immediate hardware emergency stop"
+    }
+  ]
+}

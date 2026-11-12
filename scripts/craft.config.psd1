@@ -11,8 +11,8 @@
     CliPackage  = 'robotcraft-mcp'
     CliBin      = 'robotcraft-cli'
     CliSmoke    = @('status')
-    McpArgs     = @()
-    McpSmoke    = @()
+    McpArgs     = @('--mcp')
+    McpSmoke    = @('--mcp')
     Installer   = $true
-    Mcpb        = $false
+    Mcpb        = $true
 }
