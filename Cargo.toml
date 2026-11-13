@@ -8,7 +8,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["sandraschi fleet <sandraschi@example.com>"]
 license = "MIT"
@@ -24,5 +24,7 @@ clap = { version = "4.5", features = ["derive"] }
 eframe = "0.37"
 egui = "0.37"
 chrono = { version = "0.4", features = ["serde"] }
+ureq = { version = "2.12", default-features = false, features = ["json"] }
+roxmltree = "0.20"
 databasecraft-store = { path = "../databasecraft/crates/databasecraft-store" }
 databasecraft-core = { path = "../databasecraft/crates/databasecraft-core" }

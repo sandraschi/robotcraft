@@ -12,5 +12,6 @@ serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 chrono.workspace = true
+roxmltree.workspace = true
 databasecraft-store.workspace = true
 databasecraft-core.workspace = true

@@ -464,6 +464,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
+name = "base64"
+version = "0.22.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
+
+[[package]]
 name = "bit-set"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1260,7 +1266,7 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "parlance",
  "read-fonts",
- "roxmltree",
+ "roxmltree 0.21.2",
  "smallvec",
  "windows",
  "windows-core",
@@ -2907,7 +2913,7 @@ checksum = "19b30a45b0cd0bcca8037f3d0dc3421eaf95327a17cad11964fb8179b4fc4832"
 
 [[package]]
 name = "robotcraft-app"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "databasecraft-store",
  "eframe",
@@ -2921,12 +2927,13 @@ dependencies = [
 
 [[package]]
 name = "robotcraft-core"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "databasecraft-core",
  "databasecraft-store",
  "robotcraft-hal",
+ "roxmltree 0.20.0",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -2935,17 +2942,18 @@ dependencies = [
 
 [[package]]
 name = "robotcraft-hal"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
  "thiserror 1.0.69",
  "tokio",
+ "ureq",
 ]
 
 [[package]]
 name = "robotcraft-mcp"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "clap",
  "databasecraft-store",
@@ -2955,6 +2963,12 @@ dependencies = [
  "serde_json",
  "tokio",
 ]
+
+[[package]]
+name = "roxmltree"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"
 
 [[package]]
 name = "roxmltree"
@@ -3664,6 +3678,20 @@ name = "unicode-width"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ca718471876992059f251e33aafc334346ada08042b7661dd1fe313a9bced557"
+
+[[package]]
+name = "ureq"
+version = "2.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "02d1a66277ed75f640d608235660df48c8e3c19f3b4edb6a263315626cc3c01d"
+dependencies = [
+ "base64",
+ "log",
+ "once_cell",
+ "serde",
+ "serde_json",
+ "url",
+]
 
 [[package]]
 name = "url"

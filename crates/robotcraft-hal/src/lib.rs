@@ -9,6 +9,8 @@
 #![deny(clippy::unimplemented)]
 #![deny(clippy::todo)]
 
+pub mod peers;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -53,8 +55,14 @@ impl HardwareAdapter {
                 battery_percentage: 84.5,
                 is_armed: true,
                 emergency_stopped: false,
-                motor_temperatures_c: vec![38.2, 39.1, 41.0, 40.5, 37.8, 38.6, 42.1, 41.8, 39.0, 39.5, 40.2, 41.1],
-                current_velocity: TwistVelocity { linear_x: 0.0, linear_y: 0.0, angular_z: 0.0 },
+                motor_temperatures_c: vec![
+                    38.2, 39.1, 41.0, 40.5, 37.8, 38.6, 42.1, 41.8, 39.0, 39.5, 40.2, 41.1,
+                ],
+                current_velocity: TwistVelocity {
+                    linear_x: 0.0,
+                    linear_y: 0.0,
+                    angular_z: 0.0,
+                },
                 timestamp_ms: 1762234000000,
             },
             HardwareKind::YahboomRover => TelemetrySnapshot {
@@ -64,7 +72,11 @@ impl HardwareAdapter {
                 is_armed: true,
                 emergency_stopped: false,
                 motor_temperatures_c: vec![32.0, 32.5, 33.1, 32.8],
-                current_velocity: TwistVelocity { linear_x: 0.0, linear_y: 0.0, angular_z: 0.0 },
+                current_velocity: TwistVelocity {
+                    linear_x: 0.0,
+                    linear_y: 0.0,
+                    angular_z: 0.0,
+                },
                 timestamp_ms: 1762234000000,
             },
             HardwareKind::SaschibotService => TelemetrySnapshot {
@@ -73,8 +85,15 @@ impl HardwareAdapter {
                 battery_percentage: 94.2,
                 is_armed: true,
                 emergency_stopped: false,
-                motor_temperatures_c: vec![28.4, 29.1, 31.0, 30.5, 33.2, 34.0, 31.5, 32.2, 29.8, 30.1, 32.4, 33.1, 30.9, 31.2],
-                current_velocity: TwistVelocity { linear_x: 0.25, linear_y: 0.0, angular_z: 0.05 },
+                motor_temperatures_c: vec![
+                    28.4, 29.1, 31.0, 30.5, 33.2, 34.0, 31.5, 32.2, 29.8, 30.1, 32.4, 33.1, 30.9,
+                    31.2,
+                ],
+                current_velocity: TwistVelocity {
+                    linear_x: 0.25,
+                    linear_y: 0.0,
+                    angular_z: 0.05,
+                },
                 timestamp_ms: 1762234000000,
             },
             HardwareKind::NoriRoboticsA3 => TelemetrySnapshot {
@@ -83,8 +102,15 @@ impl HardwareAdapter {
                 battery_percentage: 88.0,
                 is_armed: true,
                 emergency_stopped: false,
-                motor_temperatures_c: vec![35.2, 36.1, 37.4, 38.0, 36.5, 35.8, 34.9, 36.2, 37.1, 38.4, 36.9, 35.5, 34.2, 35.0, 33.8, 34.1],
-                current_velocity: TwistVelocity { linear_x: 0.15, linear_y: 0.0, angular_z: 0.10 },
+                motor_temperatures_c: vec![
+                    35.2, 36.1, 37.4, 38.0, 36.5, 35.8, 34.9, 36.2, 37.1, 38.4, 36.9, 35.5, 34.2,
+                    35.0, 33.8, 34.1,
+                ],
+                current_velocity: TwistVelocity {
+                    linear_x: 0.15,
+                    linear_y: 0.0,
+                    angular_z: 0.10,
+                },
                 timestamp_ms: 1762234000000,
             },
             HardwareKind::NoetixBumiHumanoid => TelemetrySnapshot {
@@ -96,12 +122,16 @@ impl HardwareAdapter {
                 motor_temperatures_c: vec![
                     36.0, 37.2, 39.5, 38.1, 37.0, 36.5, // Left leg
                     36.2, 37.0, 39.1, 38.4, 37.2, 36.8, // Right leg
-                    35.0,                               // Lumbar
-                    34.0, 35.2, 33.5,                   // Left arm
-                    34.1, 35.0, 33.8,                   // Right arm
-                    32.0, 32.5                          // Head
+                    35.0, // Lumbar
+                    34.0, 35.2, 33.5, // Left arm
+                    34.1, 35.0, 33.8, // Right arm
+                    32.0, 32.5, // Head
                 ],
-                current_velocity: TwistVelocity { linear_x: 0.12, linear_y: 0.0, angular_z: 0.0 },
+                current_velocity: TwistVelocity {
+                    linear_x: 0.12,
+                    linear_y: 0.0,
+                    angular_z: 0.0,
+                },
                 timestamp_ms: 1762234000000,
             },
             _ => TelemetrySnapshot {
@@ -111,7 +141,11 @@ impl HardwareAdapter {
                 is_armed: true,
                 emergency_stopped: false,
                 motor_temperatures_c: vec![25.0, 25.0],
-                current_velocity: TwistVelocity { linear_x: 0.0, linear_y: 0.0, angular_z: 0.0 },
+                current_velocity: TwistVelocity {
+                    linear_x: 0.0,
+                    linear_y: 0.0,
+                    angular_z: 0.0,
+                },
                 timestamp_ms: 1762234000000,
             },
         }

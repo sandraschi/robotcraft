@@ -24,6 +24,8 @@ pub enum ActiveWorkspace {
     TeleopControl,
     KinematicsStudio,
     FleetStatus,
+    YahboomDeck,
+    VlaStudio,
 }
 
 pub struct RobotCraftGui {
@@ -58,6 +60,17 @@ pub struct RobotCraftGui {
     pub viewer_zoom: f32,
     pub viewer_auto_rotate: bool,
     pub viewer_show_wireframe: bool,
+    pub teleop_confirm: bool,
+    pub peer_snapshot: Option<Value>,
+    pub yahboom_result: Option<Value>,
+    pub vla_snapshot: Option<Value>,
+    pub vla_result: Option<Value>,
+    pub vla_task_hint: String,
+    pub urdf_pose: Option<Value>,
+    pub urdf_joint_values: Vec<(String, f32)>,
+    pub isaac_scene: String,
+    pub isaac_confirm: bool,
+    pub isaac_result: Option<Value>,
 }
 
 impl RobotCraftGui {
@@ -79,7 +92,9 @@ impl RobotCraftGui {
             cad_plan_data: None,
             workflow_result: None,
             reachability_result: None,
-            status_message: format!("RobotCraft v{APP_VERSION} [Control Port {CONTROL_PORT} Active]"),
+            status_message: format!(
+                "RobotCraft v{APP_VERSION} [Control Port {CONTROL_PORT} Active]"
+            ),
             is_dark_theme: true,
             is_authenticated: false,
             auth_username: "teleoperator".to_string(),
@@ -94,6 +109,17 @@ impl RobotCraftGui {
             viewer_zoom: 1.0,
             viewer_auto_rotate: false,
             viewer_show_wireframe: false,
+            teleop_confirm: false,
+            peer_snapshot: None,
+            yahboom_result: None,
+            vla_snapshot: None,
+            vla_result: None,
+            vla_task_hint: "drive to the doorway and stop".to_string(),
+            urdf_pose: None,
+            urdf_joint_values: Vec::new(),
+            isaac_scene: String::new(),
+            isaac_confirm: false,
+            isaac_result: None,
         };
         app.fetch_telemetry();
         app.fetch_model();
@@ -103,7 +129,10 @@ impl RobotCraftGui {
 
     pub fn fetch_cad(&mut self) {
         let id = self.selected_robot.clone();
-        let res = self.runtime.block_on(dispatch(Command::GetRobotCadPlan { robot_id: id }, &self.store));
+        let res = self.runtime.block_on(dispatch(
+            Command::GetRobotCadPlan { robot_id: id },
+            &self.store,
+        ));
         self.cad_plan_data = Some(res);
     }
 
@@ -117,7 +146,8 @@ impl RobotCraftGui {
             &self.store,
         ));
         self.workflow_result = Some(res);
-        self.status_message = format!("Dispatched AI Workflow '{wf_type}' for {id} in virtual space");
+        self.status_message =
+            format!("Dispatched AI Workflow '{wf_type}' for {id} in virtual space");
 
         match wf_type {
             "explore_and_map" => {
@@ -138,12 +168,17 @@ impl RobotCraftGui {
 
     pub fn fetch_telemetry(&mut self) {
         let id = self.selected_robot.clone();
-        let res = self.runtime.block_on(dispatch(Command::GetTelemetry { robot_id: id }, &self.store));
+        let res = self.runtime.block_on(dispatch(
+            Command::GetTelemetry { robot_id: id },
+            &self.store,
+        ));
         self.telemetry_data = Some(res);
     }
 
     pub fn fetch_model(&mut self) {
-        let res = self.runtime.block_on(dispatch(Command::GetRobotModel, &self.store));
+        let res = self
+            .runtime
+            .block_on(dispatch(Command::GetRobotModel, &self.store));
         self.model_data = Some(res);
     }
 
@@ -151,20 +186,238 @@ impl RobotCraftGui {
         let lx = self.linear_x;
         let ly = self.linear_y;
         let az = self.angular_z;
-        let _ = self.runtime.block_on(dispatch(Command::TeleopTwist { linear_x: lx, linear_y: ly, angular_z: az }, &self.store));
-        self.status_message = format!("Teleop twist velocity [{lx:.2}, {ly:.2}, {az:.2}] dispatched");
+        let robot_id = self.selected_robot.clone();
+        let confirm = self.teleop_confirm;
+        let res = self.runtime.block_on(dispatch(
+            Command::TeleopTwist {
+                linear_x: lx,
+                linear_y: ly,
+                angular_z: az,
+                robot_id,
+                confirm,
+            },
+            &self.store,
+        ));
+        self.yahboom_result = Some(res.clone());
+        if res
+            .get("confirm_required")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
+            self.status_message =
+                "Yahboom did not move. Tick confirm, then dispatch again.".to_string();
+        } else if res
+            .get("simulated")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
+            self.status_message =
+                format!("Simulated twist [{lx:.2}, {ly:.2}, {az:.2}] (no hardware peer)");
+        } else if res
+            .get("success")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
+            self.status_message = format!(
+                "Twist [{lx:.2}, {ly:.2}, {az:.2}] accepted by {}",
+                res["source"].as_str().unwrap_or("studio")
+            );
+        } else {
+            self.status_message = res["error"]
+                .as_str()
+                .unwrap_or("teleop rejected")
+                .to_string();
+        }
+    }
+
+    pub fn fetch_peers(&mut self) {
+        let res = self
+            .runtime
+            .block_on(dispatch(Command::ProbePeers, &self.store));
+        self.peer_snapshot = Some(res);
+        self.status_message = "Probed yahboom-mcp and vla-mcp".to_string();
+    }
+
+    pub fn yahboom_op(&mut self, operation: &str, confirm: bool) {
+        let res = self.runtime.block_on(dispatch(
+            Command::YahboomCall {
+                operation: operation.to_string(),
+                param1: None,
+                confirm,
+            },
+            &self.store,
+        ));
+        if res
+            .get("confirm_required")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
+            self.status_message =
+                format!("{operation} held. Confirm is required before the base moves.");
+        } else if res
+            .get("success")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
+            self.status_message = format!("yahboom-mcp {operation} ok");
+        } else {
+            self.status_message = res["error"]
+                .as_str()
+                .unwrap_or("yahboom-mcp call failed")
+                .to_string();
+        }
+        self.yahboom_result = Some(res);
+        self.fetch_telemetry();
+    }
+
+    pub fn fetch_vla(&mut self) {
+        let res = self
+            .runtime
+            .block_on(dispatch(Command::VlaSnapshot, &self.store));
+        let reachable = res
+            .get("reachable")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        self.status_message = if reachable {
+            "vla-mcp snapshot loaded".to_string()
+        } else {
+            "vla-mcp is not reachable on :11024".to_string()
+        };
+        self.vla_snapshot = Some(res);
+    }
+
+    pub fn reload_urdf(&mut self) {
+        let joints = self.urdf_joint_values.clone();
+        let res = self.runtime.block_on(dispatch(
+            Command::UrdfPose {
+                path: String::new(),
+                joints,
+            },
+            &self.store,
+        ));
+        if res
+            .get("success")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
+            if self.urdf_joint_values.is_empty() {
+                if let Some(rows) = res.get("joints").and_then(|v| v.as_array()) {
+                    self.urdf_joint_values = rows
+                        .iter()
+                        .filter_map(|row| {
+                            let name = row.get("name")?.as_str()?.to_string();
+                            let value = row.get("value")?.as_f64()? as f32;
+                            Some((name, value))
+                        })
+                        .collect();
+                }
+            }
+            let count = res.get("link_count").and_then(|v| v.as_u64()).unwrap_or(0);
+            let robot = res.get("robot").and_then(|v| v.as_str()).unwrap_or("urdf");
+            self.status_message = format!("URDF {robot}: {count} links");
+            self.urdf_pose = Some(res);
+        } else {
+            self.urdf_pose = None;
+            self.status_message = res
+                .get("error")
+                .and_then(|v| v.as_str())
+                .unwrap_or("URDF load failed")
+                .to_string();
+        }
+    }
+
+    pub fn fetch_isaac(&mut self) {
+        let res = self
+            .runtime
+            .block_on(dispatch(Command::IsaacSnapshot, &self.store));
+        let reachable = res
+            .get("reachable")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        self.status_message = if reachable {
+            "isaac-mcp snapshot loaded".to_string()
+        } else {
+            "isaac-mcp is not reachable on :11049".to_string()
+        };
+        self.isaac_result = Some(res);
+    }
+
+    pub fn start_isaac(&mut self) {
+        let scene_name = self.isaac_scene.clone();
+        let confirm = self.isaac_confirm;
+        let res = self.runtime.block_on(dispatch(
+            Command::IsaacStart {
+                scene_name,
+                confirm,
+            },
+            &self.store,
+        ));
+        self.status_message = if res
+            .get("confirm_required")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
+            "Isaac job held. Tick confirm before start.".to_string()
+        } else if res
+            .get("success")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
+            "Isaac job accepted".to_string()
+        } else {
+            res.get("error")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Isaac start failed")
+                .to_string()
+        };
+        self.isaac_result = Some(res);
+    }
+
+    pub fn vla_prepare(&mut self, tool: &str, operation: &str) {
+        let hint = self.vla_task_hint.clone();
+        let res = self.runtime.block_on(dispatch(
+            Command::VlaCall {
+                tool: tool.to_string(),
+                operation: operation.to_string(),
+                task_hint: Some(hint),
+                target: Some("raspbot".to_string()),
+                model_key: None,
+                confirm: false,
+            },
+            &self.store,
+        ));
+        self.status_message = if res
+            .get("success")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
+            format!("{tool} {operation} returned")
+        } else {
+            res["error"]
+                .as_str()
+                .unwrap_or("vla-mcp call failed")
+                .to_string()
+        };
+        self.vla_result = Some(res);
     }
 
     pub fn validate_reachability(&mut self) {
         let x = self.target_x;
         let y = self.target_y;
         let z = self.target_z;
-        let res = self.runtime.block_on(dispatch(Command::ValidatePose { x, y, z }, &self.store));
+        let res = self
+            .runtime
+            .block_on(dispatch(Command::ValidatePose { x, y, z }, &self.store));
         self.reachability_result = Some(res);
     }
 
     pub fn trigger_estop(&mut self) {
-        let res = self.runtime.block_on(dispatch(Command::EmergencyStop { reason: "GUI E-Stop Button Activated".to_string() }, &self.store));
+        let res = self.runtime.block_on(dispatch(
+            Command::EmergencyStop {
+                reason: "GUI E-Stop Button Activated".to_string(),
+            },
+            &self.store,
+        ));
         self.status_message = "EMERGENCY STOP ACTIVATED: ALL ACTUATORS DISABLED".to_string();
         self.telemetry_data = Some(res);
     }
@@ -191,9 +444,13 @@ fn project_3d_point(
     let z2 = y1 * sin_p + z1 * cos_p;
 
     let depth = (1.0 + y2 * 0.20).max(0.15);
-    egui::pos2(center.x + (x2 / depth) * scale, center.y - (z2 / depth) * scale)
+    egui::pos2(
+        center.x + (x2 / depth) * scale,
+        center.y - (z2 / depth) * scale,
+    )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_3d_box(
     painter: &egui::Painter,
     center: [f32; 3],
@@ -229,9 +486,33 @@ fn draw_3d_box(
     if !wireframe_only {
         let faces = [
             ([pts[4], pts[5], pts[6], pts[7]], fill_color),
-            ([pts[1], pts[2], pts[6], pts[5]], Color32::from_rgba_unmultiplied(fill_color.r().saturating_sub(15), fill_color.g().saturating_sub(15), fill_color.b().saturating_sub(15), fill_color.a())),
-            ([pts[2], pts[3], pts[7], pts[6]], Color32::from_rgba_unmultiplied(fill_color.r().saturating_add(15), fill_color.g().saturating_add(15), fill_color.b().saturating_add(15), fill_color.a())),
-            ([pts[0], pts[1], pts[5], pts[4]], Color32::from_rgba_unmultiplied(fill_color.r().saturating_sub(25), fill_color.g().saturating_sub(25), fill_color.b().saturating_sub(25), fill_color.a())),
+            (
+                [pts[1], pts[2], pts[6], pts[5]],
+                Color32::from_rgba_unmultiplied(
+                    fill_color.r().saturating_sub(15),
+                    fill_color.g().saturating_sub(15),
+                    fill_color.b().saturating_sub(15),
+                    fill_color.a(),
+                ),
+            ),
+            (
+                [pts[2], pts[3], pts[7], pts[6]],
+                Color32::from_rgba_unmultiplied(
+                    fill_color.r().saturating_add(15),
+                    fill_color.g().saturating_add(15),
+                    fill_color.b().saturating_add(15),
+                    fill_color.a(),
+                ),
+            ),
+            (
+                [pts[0], pts[1], pts[5], pts[4]],
+                Color32::from_rgba_unmultiplied(
+                    fill_color.r().saturating_sub(25),
+                    fill_color.g().saturating_sub(25),
+                    fill_color.b().saturating_sub(25),
+                    fill_color.a(),
+                ),
+            ),
         ];
         for (poly, col) in faces {
             painter.add(egui::Shape::convex_polygon(
@@ -244,15 +525,25 @@ fn draw_3d_box(
 
     let stroke = egui::Stroke::new(1.2, stroke_color);
     let edges = [
-        (0, 1), (1, 2), (2, 3), (3, 0),
-        (4, 5), (5, 6), (6, 7), (7, 4),
-        (0, 4), (1, 5), (2, 6), (3, 7),
+        (0, 1),
+        (1, 2),
+        (2, 3),
+        (3, 0),
+        (4, 5),
+        (5, 6),
+        (6, 7),
+        (7, 4),
+        (0, 4),
+        (1, 5),
+        (2, 6),
+        (3, 7),
     ];
     for (i, j) in edges {
         painter.line_segment([pts[i], pts[j]], stroke);
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_3d_cylinder(
     painter: &egui::Painter,
     center: [f32; 3],
@@ -275,8 +566,20 @@ fn draw_3d_cylinder(
         let angle = (i as f32) * std::f32::consts::TAU / (segments as f32);
         let x = radius * angle.cos();
         let y = radius * angle.sin();
-        let p_top = project_3d_point([center[0] + x, center[1] + y, center[2] + hz], yaw, pitch, zoom, viewport_center);
-        let p_bot = project_3d_point([center[0] + x, center[1] + y, center[2] - hz], yaw, pitch, zoom, viewport_center);
+        let p_top = project_3d_point(
+            [center[0] + x, center[1] + y, center[2] + hz],
+            yaw,
+            pitch,
+            zoom,
+            viewport_center,
+        );
+        let p_bot = project_3d_point(
+            [center[0] + x, center[1] + y, center[2] - hz],
+            yaw,
+            pitch,
+            zoom,
+            viewport_center,
+        );
         top_pts.push(p_top);
         bot_pts.push(p_bot);
     }
@@ -300,6 +603,7 @@ fn draw_3d_cylinder(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_3d_sphere_node(
     painter: &egui::Painter,
     center: [f32; 3],
@@ -377,10 +681,22 @@ impl eframe::App for RobotCraftGui {
                         self.fetch_cad();
                         ui.close();
                     }
+                    ui.separator();
+                    if ui.button("Yahboom ROSMASTER (yahboom-mcp)").clicked() {
+                        self.selected_robot = "yahboom_rover".to_string();
+                        self.active_workspace = ActiveWorkspace::YahboomDeck;
+                        self.fetch_telemetry();
+                        self.fetch_peers();
+                        ui.close();
+                    }
                 });
 
                 ui.menu_button("View", |ui| {
-                    let theme_label = if self.is_dark_theme { "☀ Switch to Light Theme" } else { "🌙 Switch to Dark Theme" };
+                    let theme_label = if self.is_dark_theme {
+                        "☀ Switch to Light Theme"
+                    } else {
+                        "🌙 Switch to Dark Theme"
+                    };
                     if ui.button(theme_label).clicked() {
                         self.is_dark_theme = !self.is_dark_theme;
                         ui.close();
@@ -417,12 +733,17 @@ impl eframe::App for RobotCraftGui {
                         .selected_text(label)
                         .show_ui(ui, |ui| {
                             for loc_item in robotcraft_core::i18n::AppLocale::all() {
-                                let text = format!("{} {}", loc_item.flag(), loc_item.display_name());
+                                let text =
+                                    format!("{} {}", loc_item.flag(), loc_item.display_name());
                                 let _ = ui.selectable_value(&mut self.locale, *loc_item, text);
                             }
                         });
 
-                    let (icon, label) = if self.is_dark_theme { ("☀", "Light") } else { ("🌙", "Dark") };
+                    let (icon, label) = if self.is_dark_theme {
+                        ("☀", "Light")
+                    } else {
+                        ("🌙", "Dark")
+                    };
                     if ui.small_button(format!("{icon} {label}")).clicked() {
                         self.is_dark_theme = !self.is_dark_theme;
                     }
@@ -439,13 +760,27 @@ impl eframe::App for RobotCraftGui {
         // 1. Top Bar
         egui::Panel::top("robot_top_bar").show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.strong(egui::RichText::new("🤖 ROBOTCRAFT STUDIO").color(cyan).size(16.0));
+                ui.strong(
+                    egui::RichText::new("🤖 ROBOTCRAFT STUDIO")
+                        .color(cyan)
+                        .size(16.0),
+                );
                 ui.separator();
                 ui.label(format!("v{APP_VERSION}"));
-                ui.colored_label(Color32::from_rgb(148, 163, 184), format!("| Port {CONTROL_PORT}"));
+                ui.colored_label(
+                    Color32::from_rgb(148, 163, 184),
+                    format!("| Port {CONTROL_PORT}"),
+                );
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button(egui::RichText::new("⛔ EMERGENCY STOP").color(Color32::WHITE).strong()).clicked() {
+                    if ui
+                        .button(
+                            egui::RichText::new("⛔ EMERGENCY STOP")
+                                .color(Color32::WHITE)
+                                .strong(),
+                        )
+                        .clicked()
+                    {
                         self.trigger_estop();
                     }
                 });
@@ -461,40 +796,89 @@ impl eframe::App for RobotCraftGui {
         });
 
         // 3. Navigation Rail
-        egui::Panel::left("robot_nav_rail").min_size(200.0).show(ui, |ui| {
-            ui.add_space(8.0);
-            ui.strong("WORKSPACES");
-            ui.add_space(4.0);
+        egui::Panel::left("robot_nav_rail")
+            .min_size(200.0)
+            .show(ui, |ui| {
+                ui.add_space(8.0);
+                ui.strong("WORKSPACES");
+                ui.add_space(4.0);
 
-            let nav_btn = |ui: &mut egui::Ui, active: bool, text: &str| -> bool {
-                let rich = egui::RichText::new(text).color(if active { cyan } else { Color32::WHITE });
-                ui.selectable_label(active, rich).clicked()
-            };
+                let nav_btn = |ui: &mut egui::Ui, active: bool, text: &str| -> bool {
+                    let rich =
+                        egui::RichText::new(text).color(if active { cyan } else { Color32::WHITE });
+                    ui.selectable_label(active, rich).clicked()
+                };
 
-            if nav_btn(ui, self.active_workspace == ActiveWorkspace::ThreeJsViewer, "🪐 Three.js 3D View") {
-                self.active_workspace = ActiveWorkspace::ThreeJsViewer;
-            }
-            if nav_btn(ui, self.active_workspace == ActiveWorkspace::AiWorkflows, "🧠 AI Motion Workflows") {
-                self.active_workspace = ActiveWorkspace::AiWorkflows;
-            }
-            if nav_btn(ui, self.active_workspace == ActiveWorkspace::CadPlans, "📐 CAD Plans & BOM") {
-                self.active_workspace = ActiveWorkspace::CadPlans;
-                self.fetch_cad();
-            }
-            if nav_btn(ui, self.active_workspace == ActiveWorkspace::Dashboard, "📊 Live Telemetry") {
-                self.active_workspace = ActiveWorkspace::Dashboard;
-                self.fetch_telemetry();
-            }
-            if nav_btn(ui, self.active_workspace == ActiveWorkspace::TeleopControl, "🎮 Teleop Joystick") {
-                self.active_workspace = ActiveWorkspace::TeleopControl;
-            }
-            if nav_btn(ui, self.active_workspace == ActiveWorkspace::KinematicsStudio, "📐 Kinematics Studio") {
-                self.active_workspace = ActiveWorkspace::KinematicsStudio;
-            }
-            if nav_btn(ui, self.active_workspace == ActiveWorkspace::FleetStatus, "🌐 Multi-Robot Fleet") {
-                self.active_workspace = ActiveWorkspace::FleetStatus;
-            }
-        });
+                if nav_btn(
+                    ui,
+                    self.active_workspace == ActiveWorkspace::ThreeJsViewer,
+                    "🪐 Three.js 3D View",
+                ) {
+                    self.active_workspace = ActiveWorkspace::ThreeJsViewer;
+                }
+                if nav_btn(
+                    ui,
+                    self.active_workspace == ActiveWorkspace::AiWorkflows,
+                    "🧠 AI Motion Workflows",
+                ) {
+                    self.active_workspace = ActiveWorkspace::AiWorkflows;
+                }
+                if nav_btn(
+                    ui,
+                    self.active_workspace == ActiveWorkspace::CadPlans,
+                    "📐 CAD Plans & BOM",
+                ) {
+                    self.active_workspace = ActiveWorkspace::CadPlans;
+                    self.fetch_cad();
+                }
+                if nav_btn(
+                    ui,
+                    self.active_workspace == ActiveWorkspace::Dashboard,
+                    "📊 Live Telemetry",
+                ) {
+                    self.active_workspace = ActiveWorkspace::Dashboard;
+                    self.fetch_telemetry();
+                }
+                if nav_btn(
+                    ui,
+                    self.active_workspace == ActiveWorkspace::TeleopControl,
+                    "🎮 Teleop Joystick",
+                ) {
+                    self.active_workspace = ActiveWorkspace::TeleopControl;
+                }
+                if nav_btn(
+                    ui,
+                    self.active_workspace == ActiveWorkspace::KinematicsStudio,
+                    "📐 Kinematics Studio",
+                ) {
+                    self.active_workspace = ActiveWorkspace::KinematicsStudio;
+                }
+                if nav_btn(
+                    ui,
+                    self.active_workspace == ActiveWorkspace::FleetStatus,
+                    "🌐 Multi-Robot Fleet",
+                ) {
+                    self.active_workspace = ActiveWorkspace::FleetStatus;
+                }
+                if nav_btn(
+                    ui,
+                    self.active_workspace == ActiveWorkspace::YahboomDeck,
+                    "🛞 Yahboom Deck",
+                ) {
+                    self.active_workspace = ActiveWorkspace::YahboomDeck;
+                    self.selected_robot = "yahboom_rover".to_string();
+                    self.fetch_peers();
+                    self.fetch_telemetry();
+                }
+                if nav_btn(
+                    ui,
+                    self.active_workspace == ActiveWorkspace::VlaStudio,
+                    "🧠 VLA Studio",
+                ) {
+                    self.active_workspace = ActiveWorkspace::VlaStudio;
+                    self.fetch_vla();
+                }
+            });
 
         // 4. Central Panel
         egui::CentralPanel::default().show(ui, |ui| match self.active_workspace {
@@ -512,13 +896,19 @@ impl eframe::App for RobotCraftGui {
                     }
                     if ui.selectable_label(self.selected_robot == "nori_a3", "🤖 NoriRobotics A3 (16-DOF)").clicked() {
                         self.selected_robot = "nori_a3".to_string();
+                        self.urdf_joint_values.clear();
                         self.fetch_telemetry();
                         self.fetch_cad();
+                        self.reload_urdf();
                     }
                     if ui.selectable_label(self.selected_robot == "noetix_bumi", "🤖 Noetix Bumi (21-DOF)").clicked() {
                         self.selected_robot = "noetix_bumi".to_string();
                         self.fetch_telemetry();
                         self.fetch_cad();
+                    }
+                    if ui.selectable_label(self.selected_robot == "yahboom_rover", "🛞 Yahboom ROSMASTER").clicked() {
+                        self.selected_robot = "yahboom_rover".to_string();
+                        self.fetch_telemetry();
                     }
                 });
 
@@ -613,8 +1003,33 @@ impl eframe::App for RobotCraftGui {
 
                 let wire = self.viewer_show_wireframe;
 
-                // Render Active Robot
-                match self.selected_robot.as_str() {
+                let urdf_links = if self.selected_robot == "nori_a3" {
+                    self.urdf_pose.as_ref().and_then(|pose| pose.get("links")).and_then(|links| links.as_array()).cloned()
+                } else {
+                    None
+                };
+                if let Some(links) = urdf_links {
+                    for link in links {
+                        let x = link.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+                        let y = link.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+                        let z = link.get("z").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+                        let sx = link.get("sx").and_then(|v| v.as_f64()).unwrap_or(0.04) as f32;
+                        let sy = link.get("sy").and_then(|v| v.as_f64()).unwrap_or(0.04) as f32;
+                        let sz = link.get("sz").and_then(|v| v.as_f64()).unwrap_or(0.04) as f32;
+                        draw_3d_box(
+                            &painter,
+                            [x, y, z],
+                            [sx.max(0.02), sy.max(0.02), sz.max(0.02)],
+                            Color32::from_rgb(56, 189, 248),
+                            Color32::from_rgb(14, 116, 144),
+                            self.viewer_yaw,
+                            self.viewer_pitch,
+                            self.viewer_zoom,
+                            vp_center,
+                            wire,
+                        );
+                    }
+                } else { match self.selected_robot.as_str() {
                     "saschibot" => {
                         // 1. Mobile base chassis (680 x 540 x 80mm)
                         draw_3d_box(&painter, [0.0, 0.0, 0.08], [0.68, 0.54, 0.08], Color32::from_rgb(30, 41, 59), Color32::from_rgb(100, 116, 139), self.viewer_yaw, self.viewer_pitch, self.viewer_zoom, vp_center, wire);
@@ -638,6 +1053,14 @@ impl eframe::App for RobotCraftGui {
                             draw_3d_box(&painter, [0.0, sy, 0.56], [0.04, 0.04, 0.20], Color32::from_rgb(217, 119, 6), Color32::from_rgb(251, 191, 36), self.viewer_yaw, self.viewer_pitch, self.viewer_zoom, vp_center, wire);
                             draw_3d_box(&painter, [0.0, sy, 0.44], [0.06, 0.084, 0.04], Color32::from_rgb(51, 65, 85), Color32::WHITE, self.viewer_yaw, self.viewer_pitch, self.viewer_zoom, vp_center, wire);
                         }
+                    }
+                    "yahboom_rover" => {
+                        draw_3d_box(&painter, [0.0, 0.0, 0.06], [0.24, 0.18, 0.06], Color32::from_rgb(30, 41, 59), Color32::from_rgb(245, 158, 11), self.viewer_yaw, self.viewer_pitch, self.viewer_zoom, vp_center, wire);
+                        for (x, y) in [(0.09_f32, 0.10_f32), (0.09, -0.10), (-0.09, 0.10), (-0.09, -0.10)] {
+                            draw_3d_cylinder(&painter, [x, y, 0.04], 0.035, 0.03, Color32::from_rgb(15, 23, 42), Color32::from_rgb(148, 163, 184), self.viewer_yaw, self.viewer_pitch, self.viewer_zoom, vp_center, wire);
+                        }
+                        draw_3d_box(&painter, [0.06, 0.0, 0.14], [0.04, 0.04, 0.10], Color32::from_rgb(51, 65, 85), Color32::WHITE, self.viewer_yaw, self.viewer_pitch, self.viewer_zoom, vp_center, wire);
+                        draw_3d_box(&painter, [0.09, 0.0, 0.18], [0.04, 0.06, 0.03], Color32::from_rgb(6, 182, 212), Color32::WHITE, self.viewer_yaw, self.viewer_pitch, self.viewer_zoom, vp_center, wire);
                     }
                     "nori_a3" => {
                         // Cylindrical molded base shell (Z=0.08, r=0.25, h=0.16)
@@ -693,6 +1116,7 @@ impl eframe::App for RobotCraftGui {
                         }
                     }
                 }
+                }
 
                 // HUD Overlay (Top-Left of 3D canvas)
                 let hud_rect = egui::Rect::from_min_size(vp_rect.min + egui::vec2(12.0, 12.0), egui::vec2(280.0, 68.0));
@@ -702,16 +1126,58 @@ impl eframe::App for RobotCraftGui {
                 let bot_label = match self.selected_robot.as_str() {
                     "saschibot" => "🤖 Saschibot P6 (14-DOF Bimanual + Mast)",
                     "nori_a3" => "🤖 NoriRobotics A3 (16-DOF Manipulator)",
+                    "yahboom_rover" => "🛞 Yahboom ROSMASTER (yahboom-mcp)",
                     _ => "🤖 Noetix Bumi (21-DOF Bipedal Humanoid)",
                 };
                 painter.text(hud_rect.min + egui::vec2(10.0, 10.0), egui::Align2::LEFT_TOP, bot_label, egui::FontId::proportional(13.0), cyan);
-                painter.text(hud_rect.min + egui::vec2(10.0, 28.0), egui::Align2::LEFT_TOP, "● 3D Telemetry Render: ONLINE", egui::FontId::proportional(11.0), Color32::from_rgb(16, 185, 129));
+                painter.text(hud_rect.min + egui::vec2(10.0, 28.0), egui::Align2::LEFT_TOP, "● Local viewport (not a live twin)", egui::FontId::proportional(11.0), Color32::from_rgb(148, 163, 184));
                 painter.text(hud_rect.min + egui::vec2(10.0, 46.0), egui::Align2::LEFT_TOP, format!("Azimuth: {:.0}° | Elev: {:.0}° | Zoom: {:.1}x", self.viewer_yaw.to_degrees(), self.viewer_pitch.to_degrees(), self.viewer_zoom), egui::FontId::proportional(10.5), Color32::from_rgb(148, 163, 184));
 
                 // Bottom-right hint
                 painter.text(vp_rect.max - egui::vec2(12.0, 12.0), egui::Align2::RIGHT_BOTTOM, "🖱 Drag: Orbit | Scroll: Zoom", egui::FontId::proportional(11.0), Color32::from_rgb(100, 116, 139));
 
                 ui.add_space(8.0);
+
+                if self.selected_robot == "nori_a3" {
+                    ui.horizontal(|ui| {
+                        if ui.button("Reload Nori URDF").clicked() {
+                            self.urdf_joint_values.clear();
+                            self.reload_urdf();
+                        }
+                        if let Some(path) = self.urdf_pose.as_ref().and_then(|pose| pose.get("path")).and_then(|path| path.as_str()) {
+                            ui.label(path);
+                        }
+                    });
+                    let specs: Vec<(String, f32, f32)> = self
+                        .urdf_pose
+                        .as_ref()
+                        .and_then(|pose| pose.get("joints"))
+                        .and_then(|joints| joints.as_array())
+                        .map(|rows| {
+                            rows.iter()
+                                .filter_map(|row| {
+                                    let name = row.get("name")?.as_str()?.to_string();
+                                    let lower = row.get("lower")?.as_f64()? as f32;
+                                    let upper = row.get("upper")?.as_f64()? as f32;
+                                    Some((name, lower, upper))
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    let mut dirty = false;
+                    egui::ScrollArea::vertical().max_height(180.0).show(ui, |ui| {
+                        for (name, lower, upper) in &specs {
+                            if let Some((_, value)) = self.urdf_joint_values.iter_mut().find(|(joint_name, _)| joint_name == name) {
+                                if ui.add(egui::Slider::new(value, *lower..=*upper).text(name)).changed() {
+                                    dirty = true;
+                                }
+                            }
+                        }
+                    });
+                    if dirty {
+                        self.reload_urdf();
+                    }
+                }
 
                 // Quick CAD & Telemetry cards
                 ui.columns(2, |cols| {
@@ -853,6 +1319,18 @@ impl eframe::App for RobotCraftGui {
                     });
                 });
                 ui.separator();
+                if let Some(ref telem_res) = self.telemetry_data {
+                    let source = telem_res["source"].as_str().unwrap_or("studio-fixture");
+                    let live = telem_res["live"].as_bool().unwrap_or(false);
+                    if live {
+                        ui.colored_label(Color32::from_rgb(16, 185, 129), format!("Source: {source} (live)"));
+                    } else {
+                        ui.colored_label(Color32::from_rgb(245, 158, 11), format!("Source: {source}"));
+                    }
+                    if let Some(note) = telem_res["note"].as_str() {
+                        ui.label(note);
+                    }
+                }
 
                 if let Some(ref telem_res) = self.telemetry_data {
                     if let Some(telem) = telem_res.get("telemetry") {
@@ -865,7 +1343,11 @@ impl eframe::App for RobotCraftGui {
                             cols[1].group(|ui| {
                                 ui.colored_label(Color32::from_rgb(52, 211, 153), "BATTERY LEVEL");
                                 ui.heading(format!("{:.1}%", telem["battery_percentage"].as_f64().unwrap_or(0.0)));
-                                ui.label("Voltage: 24.8V Nominal");
+                                if let Some(volts) = telem.get("voltage").and_then(|v| v.as_f64()) {
+                                    ui.label(format!("Voltage: {volts:.2} V"));
+                                } else {
+                                    ui.label("Voltage: not reported");
+                                }
                             });
                             cols[2].group(|ui| {
                                 ui.colored_label(Color32::from_rgb(251, 191, 36), "SAFETY STATUS");
@@ -910,10 +1392,11 @@ impl eframe::App for RobotCraftGui {
                 });
                 ui.horizontal(|ui| {
                     ui.label("Angular Z (Yaw Turn):");
-                    ui.add(egui::Slider::new(&mut self.angular_z, -3.14..=3.14).suffix(" rad/s"));
+                    ui.add(egui::Slider::new(&mut self.angular_z, -std::f32::consts::PI..=std::f32::consts::PI).suffix(" rad/s"));
                 });
 
                 ui.add_space(8.0);
+                ui.checkbox(&mut self.teleop_confirm, "Confirm hardware motion (required for Yahboom)");
                 ui.horizontal(|ui| {
                     if ui.button(egui::RichText::new("🚀 Dispatch Velocity").color(cyan).strong()).clicked() {
                         self.send_teleop();
@@ -951,10 +1434,142 @@ impl eframe::App for RobotCraftGui {
                     }
                 }
             }
+            ActiveWorkspace::YahboomDeck => {
+                ui.heading("Yahboom deck");
+                ui.label("Talks to yahboom-mcp on :10892. Motion verbs do nothing until confirm is ticked. Stop always posts.");
+                ui.separator();
+                ui.horizontal(|ui| {
+                    if ui.button("Probe peers").clicked() {
+                        self.fetch_peers();
+                        self.fetch_telemetry();
+                    }
+                    if ui.button("Read battery / IMU").clicked() {
+                        self.yahboom_op("read_all", false);
+                    }
+                    if ui.button("Stop").clicked() {
+                        self.yahboom_op("stop_all", true);
+                    }
+                });
+                ui.checkbox(&mut self.teleop_confirm, "Confirm motion");
+                ui.horizontal(|ui| {
+                    let go = self.teleop_confirm;
+                    if ui.button("Forward").clicked() {
+                        self.yahboom_op("forward", go);
+                    }
+                    if ui.button("Back").clicked() {
+                        self.yahboom_op("backward", go);
+                    }
+                    if ui.button("Left").clicked() {
+                        self.yahboom_op("turn_left", go);
+                    }
+                    if ui.button("Right").clicked() {
+                        self.yahboom_op("turn_right", go);
+                    }
+                });
+                if let Some(note) = self.telemetry_data.as_ref().and_then(|v| v.get("note")).and_then(|n| n.as_str()) {
+                    ui.label(note);
+                }
+                if let Some(ref peer) = self.peer_snapshot {
+                    ui.add_space(6.0);
+                    ui.strong("Peer probe");
+                    ui.group(|ui| {
+                        ui.monospace(serde_json::to_string_pretty(peer).unwrap_or_default());
+                    });
+                }
+                if let Some(ref result) = self.yahboom_result {
+                    ui.add_space(6.0);
+                    ui.strong("Last yahboom-mcp result");
+                    ui.group(|ui| {
+                        ui.monospace(serde_json::to_string_pretty(result).unwrap_or_default());
+                    });
+                }
+            }
+            ActiveWorkspace::VlaStudio => {
+                ui.heading("VLA studio");
+                ui.label("Reads vla-mcp on :11024. Prepare calls stay inside the whitelist (health, infer_prepare, list). Training launch is rejected.");
+                ui.separator();
+                ui.horizontal(|ui| {
+                    if ui.button("Refresh snapshot").clicked() {
+                        self.fetch_vla();
+                    }
+                    if ui.button("Wall-OSS health").clicked() {
+                        self.vla_prepare("vla_wall", "health");
+                    }
+                    if ui.button("X-VLA health (raspbot)").clicked() {
+                        self.vla_prepare("vla_xvla", "health");
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Task hint");
+                    ui.add(egui::TextEdit::singleline(&mut self.vla_task_hint).desired_width(360.0));
+                    if ui.button("Prepare Wall-OSS inference").clicked() {
+                        self.vla_prepare("vla_wall", "infer_prepare");
+                    }
+                });
+                if let Some(ref snap) = self.vla_snapshot {
+                    ui.add_space(6.0);
+                    if snap.get("reachable").and_then(|v| v.as_bool()).unwrap_or(false) {
+                        ui.colored_label(Color32::from_rgb(16, 185, 129), "vla-mcp reachable");
+                    } else {
+                        ui.colored_label(Color32::from_rgb(245, 158, 11), "vla-mcp offline");
+                    }
+                    if let Some(items) = snap.get("episodes").and_then(|ep| ep.get("items")).and_then(|items| items.as_array()) {
+                        let needle = if self.selected_robot.contains("nori") { "nori" } else { self.selected_robot.as_str() };
+                        ui.strong(format!("Episodes ({})", items.len()));
+                        for item in items.iter().take(12) {
+                            let source = item.get("source").and_then(|v| v.as_str()).unwrap_or("");
+                            let id = item.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                            let created = item.get("created_at").and_then(|v| v.as_str()).unwrap_or("");
+                            let tagged = source.to_ascii_lowercase().contains(&needle.to_ascii_lowercase());
+                            let line = format!("{id}  {source}  {created}");
+                            if tagged {
+                                ui.colored_label(Color32::from_rgb(16, 185, 129), line);
+                            } else {
+                                ui.label(line);
+                            }
+                        }
+                    }
+                    if let Some(summary) = snap.get("summary") {
+                        ui.group(|ui| {
+                            ui.monospace(serde_json::to_string_pretty(summary).unwrap_or_default());
+                        });
+                    } else {
+                        ui.group(|ui| {
+                            ui.monospace(serde_json::to_string_pretty(snap).unwrap_or_default());
+                        });
+                    }
+                }
+                if let Some(ref result) = self.vla_result {
+                    ui.add_space(6.0);
+                    ui.strong("Last vla-mcp call");
+                    ui.group(|ui| {
+                        ui.monospace(serde_json::to_string_pretty(result).unwrap_or_default());
+                    });
+                }
+            }
             ActiveWorkspace::FleetStatus => {
                 ui.heading("🌐 Multi-Robot Fleet Topologies");
                 ui.label("Manage heterogeneous fleets across quadrupeds, wheeled rovers, and articulated arms.");
                 ui.separator();
+                ui.group(|ui| {
+                    ui.colored_label(cyan, "isaac-mcp :11049");
+                    ui.label("Probe is read-only. Start posts /api/jobs/start only after confirm.");
+                    ui.horizontal(|ui| {
+                        if ui.button("Probe Isaac").clicked() {
+                            self.fetch_isaac();
+                        }
+                        ui.label("Scene");
+                        ui.add(egui::TextEdit::singleline(&mut self.isaac_scene).desired_width(180.0));
+                        ui.checkbox(&mut self.isaac_confirm, "Confirm start");
+                        if ui.button("Start job").clicked() {
+                            self.start_isaac();
+                        }
+                    });
+                    if let Some(ref isaac) = self.isaac_result {
+                        ui.monospace(serde_json::to_string_pretty(isaac).unwrap_or_default());
+                    }
+                });
+                ui.add_space(6.0);
 
                 let robots = [
                     ("saschibot", "Saschibot Mobile Service Bot P6", "Mobile Bimanual", "14-DOF", "Micro-ROS / STS3215"),
@@ -1001,16 +1616,17 @@ impl eframe::App for RobotCraftGui {
                     });
                     ui.horizontal(|ui| {
                         ui.label("Pass:");
-                        ui.add(egui::TextEdit::singleline(&mut self.auth_password_input).password(true));
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.auth_password_input)
+                                .password(true),
+                        );
                     });
                     ui.add_space(8.0);
                     ui.horizontal(|ui| {
-                        if ui.button("Confirm").clicked() {
-                            if !self.auth_username.is_empty() {
-                                self.is_authenticated = true;
-                                self.show_auth_modal = false;
-                                self.status_message = format!("Signed in as {}", self.auth_username);
-                            }
+                        if ui.button("Confirm").clicked() && !self.auth_username.is_empty() {
+                            self.is_authenticated = true;
+                            self.show_auth_modal = false;
+                            self.status_message = format!("Signed in as {}", self.auth_username);
                         }
                         if ui.button("Cancel").clicked() {
                             self.show_auth_modal = false;

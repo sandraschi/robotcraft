@@ -44,6 +44,11 @@ enum Commands {
         y: f32,
         #[arg(long, default_value_t = 0.0)]
         z: f32,
+        #[arg(long, default_value = "studio")]
+        robot: String,
+        /// Required before a Yahboom base actually moves
+        #[arg(long, default_value_t = false)]
+        confirm: bool,
     },
     /// Inspect robot kinematic model and joint bounds
     Model,
@@ -56,6 +61,45 @@ enum Commands {
     Estop {
         #[arg(long, default_value = "Manual CLI trigger")]
         reason: String,
+    },
+    /// Probe yahboom-mcp, vla-mcp, and isaac-mcp without moving hardware
+    Peers,
+    /// Call a yahboom_tool operation. Motion verbs need --confirm.
+    Yahboom {
+        operation: String,
+        #[arg(long)]
+        param1: Option<String>,
+        #[arg(long, default_value_t = false)]
+        confirm: bool,
+    },
+    /// Read vla-mcp status, weights, and fleet bridge
+    Vla,
+    /// Whitelisted vla-mcp control call (health, infer_prepare, list_models, ...)
+    VlaCall {
+        tool: String,
+        operation: String,
+        #[arg(long)]
+        task_hint: Option<String>,
+        #[arg(long)]
+        target: Option<String>,
+        #[arg(long)]
+        model_key: Option<String>,
+        #[arg(long, default_value_t = false)]
+        confirm: bool,
+    },
+    /// Pose the Nori URDF (or --path) and print link frames
+    Urdf {
+        #[arg(long, default_value = "")]
+        path: String,
+    },
+    /// isaac-mcp health and scene list
+    Isaac,
+    /// Start an Isaac job. Requires --confirm.
+    IsaacStart {
+        #[arg(long)]
+        scene: String,
+        #[arg(long, default_value_t = false)]
+        confirm: bool,
     },
 }
 
@@ -83,26 +127,120 @@ fn main() {
         }
         Some(Commands::Robots) => {
             let res = rt.block_on(dispatch(Command::ListRobots, &store));
-            println!("{}", serde_json::to_string_pretty(&res["available_robots"]).unwrap_or_default());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&res["available_robots"]).unwrap_or_default()
+            );
         }
         Some(Commands::Telemetry { robot_id }) => {
             let res = rt.block_on(dispatch(Command::GetTelemetry { robot_id }, &store));
-            println!("{}", serde_json::to_string_pretty(&res["telemetry"]).unwrap_or_default());
+            println!("{}", serde_json::to_string_pretty(&res).unwrap_or_default());
         }
-        Some(Commands::Teleop { x, y, z }) => {
-            let res = rt.block_on(dispatch(Command::TeleopTwist { linear_x: x, linear_y: y, angular_z: z }, &store));
+        Some(Commands::Teleop {
+            x,
+            y,
+            z,
+            robot,
+            confirm,
+        }) => {
+            let res = rt.block_on(dispatch(
+                Command::TeleopTwist {
+                    linear_x: x,
+                    linear_y: y,
+                    angular_z: z,
+                    robot_id: robot,
+                    confirm,
+                },
+                &store,
+            ));
             println!("{}", serde_json::to_string_pretty(&res).unwrap_or_default());
         }
         Some(Commands::Model) => {
             let res = rt.block_on(dispatch(Command::GetRobotModel, &store));
-            println!("{}", serde_json::to_string_pretty(&res["model"]).unwrap_or_default());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&res["model"]).unwrap_or_default()
+            );
         }
         Some(Commands::Fk { angles }) => {
-            let res = rt.block_on(dispatch(Command::CalculateFk { joint_angles: angles }, &store));
+            let res = rt.block_on(dispatch(
+                Command::CalculateFk {
+                    joint_angles: angles,
+                },
+                &store,
+            ));
             println!("{}", serde_json::to_string_pretty(&res).unwrap_or_default());
         }
         Some(Commands::Estop { reason }) => {
             let res = rt.block_on(dispatch(Command::EmergencyStop { reason }, &store));
+            println!("{}", serde_json::to_string_pretty(&res).unwrap_or_default());
+        }
+        Some(Commands::Peers) => {
+            let res = rt.block_on(dispatch(Command::ProbePeers, &store));
+            println!("{}", serde_json::to_string_pretty(&res).unwrap_or_default());
+        }
+        Some(Commands::Yahboom {
+            operation,
+            param1,
+            confirm,
+        }) => {
+            let res = rt.block_on(dispatch(
+                Command::YahboomCall {
+                    operation,
+                    param1,
+                    confirm,
+                },
+                &store,
+            ));
+            println!("{}", serde_json::to_string_pretty(&res).unwrap_or_default());
+        }
+        Some(Commands::Vla) => {
+            let res = rt.block_on(dispatch(Command::VlaSnapshot, &store));
+            println!("{}", serde_json::to_string_pretty(&res).unwrap_or_default());
+        }
+        Some(Commands::VlaCall {
+            tool,
+            operation,
+            task_hint,
+            target,
+            model_key,
+            confirm,
+        }) => {
+            let res = rt.block_on(dispatch(
+                Command::VlaCall {
+                    tool,
+                    operation,
+                    task_hint,
+                    target,
+                    model_key,
+                    confirm,
+                },
+                &store,
+            ));
+            println!("{}", serde_json::to_string_pretty(&res).unwrap_or_default());
+        }
+        Some(Commands::Urdf { path }) => {
+            let res = rt.block_on(dispatch(
+                Command::UrdfPose {
+                    path,
+                    joints: Vec::new(),
+                },
+                &store,
+            ));
+            println!("{}", serde_json::to_string_pretty(&res).unwrap_or_default());
+        }
+        Some(Commands::Isaac) => {
+            let res = rt.block_on(dispatch(Command::IsaacSnapshot, &store));
+            println!("{}", serde_json::to_string_pretty(&res).unwrap_or_default());
+        }
+        Some(Commands::IsaacStart { scene, confirm }) => {
+            let res = rt.block_on(dispatch(
+                Command::IsaacStart {
+                    scene_name: scene,
+                    confirm,
+                },
+                &store,
+            ));
             println!("{}", serde_json::to_string_pretty(&res).unwrap_or_default());
         }
         None => {
@@ -169,17 +307,74 @@ fn run_mcp_stdio(rt: &Runtime, store: &DatabaseStore) {
                                 "properties": {
                                     "linear_x": { "type": "number" },
                                     "linear_y": { "type": "number" },
-                                    "angular_z": { "type": "number" }
+                                    "angular_z": { "type": "number" },
+                                    "robot_id": { "type": "string", "description": "yahboom_rover routes to yahboom-mcp. Other ids stay simulated." },
+                                    "confirm": { "type": "boolean", "description": "Required before Yahboom motion is posted." }
                                 }
                             }
                         },
                         {
                             "name": "robot_estop",
-                            "description": "Activate immediate hardware emergency stop",
+                            "description": "Activate emergency stop. Also posts yahboom-mcp /api/v1/stop_all when that server is enabled.",
                             "inputSchema": {
                                 "type": "object",
                                 "properties": { "reason": { "type": "string" } },
                                 "required": ["reason"]
+                            }
+                        },
+                        { "name": "robot_peers", "description": "Probe yahboom-mcp (:10892) and vla-mcp (:11024). Does not move hardware.", "inputSchema": { "type": "object", "properties": {} } },
+                        {
+                            "name": "yahboom_call",
+                            "description": "Call yahboom_tool on yahboom-mcp. Motion verbs require confirm=true.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "operation": { "type": "string" },
+                                    "param1": { "type": "string" },
+                                    "confirm": { "type": "boolean" }
+                                },
+                                "required": ["operation"]
+                            }
+                        },
+                        { "name": "vla_snapshot", "description": "Read vla-mcp status, weight catalog, tool list, and fleet bridge.", "inputSchema": { "type": "object", "properties": {} } },
+                        {
+                            "name": "vla_call",
+                            "description": "Whitelisted vla-mcp control call. download requires confirm=true.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "tool": { "type": "string" },
+                                    "operation": { "type": "string" },
+                                    "task_hint": { "type": "string" },
+                                    "target": { "type": "string" },
+                                    "model_key": { "type": "string" },
+                                    "confirm": { "type": "boolean" }
+                                },
+                                "required": ["tool", "operation"]
+                            }
+                        },
+                        {
+                            "name": "urdf_pose",
+                            "description": "Pose links from a URDF file. Empty path loads the Nori expanded URDF. Does not move hardware.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "path": { "type": "string" },
+                                    "joints": { "type": "array", "items": { "type": "object" } }
+                                }
+                            }
+                        },
+                        { "name": "isaac_snapshot", "description": "Read isaac-mcp health and scenes. Does not start a simulation.", "inputSchema": { "type": "object", "properties": {} } },
+                        {
+                            "name": "isaac_start",
+                            "description": "POST isaac-mcp /api/jobs/start. Requires confirm=true.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "scene_name": { "type": "string" },
+                                    "confirm": { "type": "boolean" }
+                                },
+                                "required": ["scene_name"]
                             }
                         }
                     ]
@@ -194,20 +389,104 @@ fn run_mcp_stdio(rt: &Runtime, store: &DatabaseStore) {
                     "robot_status" => rt.block_on(dispatch(Command::Status, store)),
                     "robot_list" => rt.block_on(dispatch(Command::ListRobots, store)),
                     "robot_telemetry" => {
-                        let id = args["robot_id"].as_str().unwrap_or("unitree_go2").to_string();
+                        let id = args["robot_id"]
+                            .as_str()
+                            .unwrap_or("unitree_go2")
+                            .to_string();
                         rt.block_on(dispatch(Command::GetTelemetry { robot_id: id }, store))
                     }
                     "robot_teleop" => {
                         let lx = args["linear_x"].as_f64().unwrap_or(0.0) as f32;
                         let ly = args["linear_y"].as_f64().unwrap_or(0.0) as f32;
                         let az = args["angular_z"].as_f64().unwrap_or(0.0) as f32;
-                        rt.block_on(dispatch(Command::TeleopTwist { linear_x: lx, linear_y: ly, angular_z: az }, store))
+                        let robot_id = args["robot_id"].as_str().unwrap_or("studio").to_string();
+                        let confirm = args["confirm"].as_bool().unwrap_or(false);
+                        rt.block_on(dispatch(
+                            Command::TeleopTwist {
+                                linear_x: lx,
+                                linear_y: ly,
+                                angular_z: az,
+                                robot_id,
+                                confirm,
+                            },
+                            store,
+                        ))
                     }
                     "robot_estop" => {
-                        let r = args["reason"].as_str().unwrap_or("MCP emergency stop").to_string();
+                        let r = args["reason"]
+                            .as_str()
+                            .unwrap_or("MCP emergency stop")
+                            .to_string();
                         rt.block_on(dispatch(Command::EmergencyStop { reason: r }, store))
                     }
-                    unknown => json!({ "success": false, "error": format!("Unknown tool '{unknown}'") })
+                    "robot_peers" => rt.block_on(dispatch(Command::ProbePeers, store)),
+                    "yahboom_call" => {
+                        let operation = args["operation"]
+                            .as_str()
+                            .unwrap_or("health_check")
+                            .to_string();
+                        let param1 = args["param1"].as_str().map(str::to_string);
+                        let confirm = args["confirm"].as_bool().unwrap_or(false);
+                        rt.block_on(dispatch(
+                            Command::YahboomCall {
+                                operation,
+                                param1,
+                                confirm,
+                            },
+                            store,
+                        ))
+                    }
+                    "vla_snapshot" => rt.block_on(dispatch(Command::VlaSnapshot, store)),
+                    "urdf_pose" => {
+                        let path = args["path"].as_str().unwrap_or("").to_string();
+                        let joints = args["joints"]
+                            .as_array()
+                            .map(|rows| {
+                                rows.iter()
+                                    .filter_map(|row| {
+                                        let name = row.get("name")?.as_str()?.to_string();
+                                        let angle = row.get("angle")?.as_f64()? as f32;
+                                        Some((name, angle))
+                                    })
+                                    .collect::<Vec<_>>()
+                            })
+                            .unwrap_or_default();
+                        rt.block_on(dispatch(Command::UrdfPose { path, joints }, store))
+                    }
+                    "isaac_snapshot" => rt.block_on(dispatch(Command::IsaacSnapshot, store)),
+                    "isaac_start" => {
+                        let scene_name = args["scene_name"].as_str().unwrap_or("").to_string();
+                        let confirm = args["confirm"].as_bool().unwrap_or(false);
+                        rt.block_on(dispatch(
+                            Command::IsaacStart {
+                                scene_name,
+                                confirm,
+                            },
+                            store,
+                        ))
+                    }
+                    "vla_call" => {
+                        let tool = args["tool"].as_str().unwrap_or("").to_string();
+                        let operation = args["operation"].as_str().unwrap_or("").to_string();
+                        let task_hint = args["task_hint"].as_str().map(str::to_string);
+                        let target = args["target"].as_str().map(str::to_string);
+                        let model_key = args["model_key"].as_str().map(str::to_string);
+                        let confirm = args["confirm"].as_bool().unwrap_or(false);
+                        rt.block_on(dispatch(
+                            Command::VlaCall {
+                                tool,
+                                operation,
+                                task_hint,
+                                target,
+                                model_key,
+                                confirm,
+                            },
+                            store,
+                        ))
+                    }
+                    unknown => {
+                        json!({ "success": false, "error": format!("Unknown tool '{unknown}'") })
+                    }
                 };
 
                 json!({
@@ -216,10 +495,12 @@ fn run_mcp_stdio(rt: &Runtime, store: &DatabaseStore) {
                     "result": { "content": [{ "type": "text", "text": tool_res.to_string() }] }
                 })
             }
-            _ => json!({ "jsonrpc": "2.0", "id": id, "error": { "code": -32601, "message": "Method not found" } })
+            _ => {
+                json!({ "jsonrpc": "2.0", "id": id, "error": { "code": -32601, "message": "Method not found" } })
+            }
         };
 
-        let _ = writeln!(stdout, "{}", resp.to_string());
+        let _ = writeln!(stdout, "{resp}");
         let _ = stdout.flush();
     }
 }

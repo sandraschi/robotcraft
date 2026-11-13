@@ -3,7 +3,7 @@
   "name": "robotcraft",
   "display_name": "RobotCraft",
   "version": "__VERSION__",
-  "description": "RobotCraft MCP server (5 tools).",
+  "description": "RobotCraft MCP server. Kinematics studio plus yahboom-mcp and vla-mcp bridges.",
   "author": {
     "name": "Sandra Schipal",
     "url": "https://github.com/sandraschi"
@@ -48,6 +48,34 @@
     {
       "name": "robot_estop",
       "description": "Activate immediate hardware emergency stop"
+    },
+    {
+      "name": "robot_peers",
+      "description": "Probe yahboom-mcp and vla-mcp"
+    },
+    {
+      "name": "yahboom_call",
+      "description": "Call yahboom_tool. Motion requires confirm"
+    },
+    {
+      "name": "vla_snapshot",
+      "description": "Read vla-mcp status and weight catalog"
+    },
+    {
+      "name": "vla_call",
+      "description": "Whitelisted vla-mcp control call"
+    },
+    {
+      "name": "urdf_pose",
+      "description": "Pose links from the Nori URDF or a path"
+    },
+    {
+      "name": "isaac_snapshot",
+      "description": "Read isaac-mcp health and scenes"
+    },
+    {
+      "name": "isaac_start",
+      "description": "Start an Isaac job. Requires confirm"
     }
   ]
 }
