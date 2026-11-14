@@ -11,6 +11,10 @@
 use databasecraft_store::DatabaseStore;
 use eframe::egui::{self, Color32, Vec2};
 use robotcraft_core::{dispatch, Command, APP_VERSION, CONTROL_PORT};
+
+const BUILD_UTC: &str = env!("ROBOTCRAFT_BUILD_UTC");
+const GIT_SHA: &str = env!("ROBOTCRAFT_GIT_SHA");
+const RELEASE_NOTES: &str = include_str!("../../../CHANGELOG_LATEST.md");
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
@@ -620,13 +624,53 @@ fn draw_3d_sphere_node(
     painter.circle_stroke(p, r_screen.max(4.0), egui::Stroke::new(1.5, Color32::WHITE));
 }
 
+fn harsh_visuals() -> egui::Visuals {
+    let mut visuals = egui::Visuals::dark();
+    let ink = Color32::from_rgb(242, 246, 252);
+    visuals.override_text_color = Some(ink);
+    visuals.window_fill = Color32::from_rgb(2, 6, 18);
+    visuals.panel_fill = Color32::from_rgb(10, 18, 34);
+    visuals.extreme_bg_color = Color32::from_rgb(2, 6, 18);
+    visuals.code_bg_color = Color32::from_rgb(4, 10, 24);
+    visuals.faint_bg_color = Color32::from_rgb(16, 28, 50);
+    visuals.warn_fg_color = Color32::from_rgb(255, 200, 120);
+    visuals.error_fg_color = Color32::from_rgb(255, 130, 130);
+    visuals.widgets.noninteractive.fg_stroke = egui::Stroke::new(1.0, Color32::from_rgb(210, 220, 235));
+    visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, ink);
+    visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.5, Color32::WHITE);
+    visuals.widgets.active.fg_stroke = egui::Stroke::new(1.5, Color32::WHITE);
+    visuals.selection.bg_fill = Color32::from_rgb(36, 64, 107);
+    visuals.selection.stroke = egui::Stroke::new(1.0, Color32::WHITE);
+    visuals.hyperlink_color = Color32::from_rgb(147, 197, 253);
+    visuals.weak_text_color = Some(Color32::from_rgb(203, 213, 225));
+    visuals
+}
+
+fn crisp_light_visuals() -> egui::Visuals {
+    let mut visuals = egui::Visuals::light();
+    let ink = Color32::BLACK;
+    visuals.override_text_color = Some(ink);
+    visuals.weak_text_color = Some(ink);
+    visuals.window_fill = Color32::WHITE;
+    visuals.panel_fill = Color32::WHITE;
+    visuals.extreme_bg_color = Color32::WHITE;
+    visuals.faint_bg_color = Color32::WHITE;
+    visuals.widgets.noninteractive.fg_stroke = egui::Stroke::new(1.0, ink);
+    visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, ink);
+    visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.5, ink);
+    visuals.widgets.active.fg_stroke = egui::Stroke::new(1.5, ink);
+    visuals.widgets.open.fg_stroke = egui::Stroke::new(1.0, ink);
+    visuals.hyperlink_color = Color32::from_rgb(3, 105, 161);
+    visuals
+}
+
 impl eframe::App for RobotCraftGui {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        if self.is_dark_theme {
-            ui.ctx().set_visuals(egui::Visuals::dark());
+        ui.ctx().set_visuals(if self.is_dark_theme {
+            harsh_visuals()
         } else {
-            ui.ctx().set_visuals(egui::Visuals::light());
-        }
+            crisp_light_visuals()
+        });
 
         let cyan = Color32::from_rgb(6, 182, 212);
         let red_estop = Color32::from_rgb(239, 68, 68);
@@ -720,6 +764,14 @@ impl eframe::App for RobotCraftGui {
                 });
 
                 ui.menu_button("Help", |ui| {
+                    if ui.button("Build data").clicked() {
+                        self.show_about_dialog = true;
+                        ui.close();
+                    }
+                    if ui.button("Release").clicked() {
+                        self.show_about_dialog = true;
+                        ui.close();
+                    }
                     if ui.button("About RobotCraft").clicked() {
                         self.show_about_dialog = true;
                         ui.close();
@@ -767,17 +819,17 @@ impl eframe::App for RobotCraftGui {
                 );
                 ui.separator();
                 ui.label(format!("v{APP_VERSION}"));
-                ui.colored_label(
-                    Color32::from_rgb(148, 163, 184),
-                    format!("| Port {CONTROL_PORT}"),
-                );
+                ui.label(format!("| Port {CONTROL_PORT}"));
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui
-                        .button(
-                            egui::RichText::new("⛔ EMERGENCY STOP")
-                                .color(Color32::WHITE)
-                                .strong(),
+                        .add(
+                            egui::Button::new(
+                                egui::RichText::new("EMERGENCY STOP")
+                                    .color(Color32::WHITE)
+                                    .strong(),
+                            )
+                            .fill(red_estop),
                         )
                         .clicked()
                     {
@@ -804,8 +856,8 @@ impl eframe::App for RobotCraftGui {
                 ui.add_space(4.0);
 
                 let nav_btn = |ui: &mut egui::Ui, active: bool, text: &str| -> bool {
-                    let rich =
-                        egui::RichText::new(text).color(if active { cyan } else { Color32::WHITE });
+                    let idle = ui.visuals().text_color();
+                    let rich = egui::RichText::new(text).color(if active { cyan } else { idle });
                     ui.selectable_label(active, rich).clicked()
                 };
 
@@ -1130,11 +1182,11 @@ impl eframe::App for RobotCraftGui {
                     _ => "🤖 Noetix Bumi (21-DOF Bipedal Humanoid)",
                 };
                 painter.text(hud_rect.min + egui::vec2(10.0, 10.0), egui::Align2::LEFT_TOP, bot_label, egui::FontId::proportional(13.0), cyan);
-                painter.text(hud_rect.min + egui::vec2(10.0, 28.0), egui::Align2::LEFT_TOP, "● Local viewport (not a live twin)", egui::FontId::proportional(11.0), Color32::from_rgb(148, 163, 184));
-                painter.text(hud_rect.min + egui::vec2(10.0, 46.0), egui::Align2::LEFT_TOP, format!("Azimuth: {:.0}° | Elev: {:.0}° | Zoom: {:.1}x", self.viewer_yaw.to_degrees(), self.viewer_pitch.to_degrees(), self.viewer_zoom), egui::FontId::proportional(10.5), Color32::from_rgb(148, 163, 184));
+                painter.text(hud_rect.min + egui::vec2(10.0, 28.0), egui::Align2::LEFT_TOP, "● Local viewport (not a live twin)", egui::FontId::proportional(11.0), Color32::from_rgb(242, 246, 252));
+                painter.text(hud_rect.min + egui::vec2(10.0, 46.0), egui::Align2::LEFT_TOP, format!("Azimuth: {:.0}° | Elev: {:.0}° | Zoom: {:.1}x", self.viewer_yaw.to_degrees(), self.viewer_pitch.to_degrees(), self.viewer_zoom), egui::FontId::proportional(10.5), Color32::from_rgb(242, 246, 252));
 
                 // Bottom-right hint
-                painter.text(vp_rect.max - egui::vec2(12.0, 12.0), egui::Align2::RIGHT_BOTTOM, "🖱 Drag: Orbit | Scroll: Zoom", egui::FontId::proportional(11.0), Color32::from_rgb(100, 116, 139));
+                painter.text(vp_rect.max - egui::vec2(12.0, 12.0), egui::Align2::RIGHT_BOTTOM, "Drag: Orbit | Scroll: Zoom", egui::FontId::proportional(11.0), Color32::from_rgb(242, 246, 252));
 
                 ui.add_space(8.0);
 
@@ -1367,7 +1419,7 @@ impl eframe::App for RobotCraftGui {
                                 for (i, t) in temps.iter().enumerate() {
                                     ui.group(|ui| {
                                         ui.label(format!("M{}", i + 1));
-                                        ui.colored_label(Color32::WHITE, format!("{:.1}°", t.as_f64().unwrap_or(0.0)));
+                                        ui.colored_label(ui.visuals().text_color(), format!("{:.1}°", t.as_f64().unwrap_or(0.0)));
                                     });
                                 }
                             });
@@ -1587,7 +1639,7 @@ impl eframe::App for RobotCraftGui {
                             if is_sel {
                                 ui.colored_label(cyan, format!("● ACTIVE: {name}"));
                             } else {
-                                ui.colored_label(Color32::WHITE, name);
+                                ui.colored_label(ui.visuals().text_color(), name);
                             }
                             ui.label(format!("• {cat} • {dof} • {proto}"));
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -1635,25 +1687,52 @@ impl eframe::App for RobotCraftGui {
                 });
         }
 
-        // Modal: About Dialog
         if self.show_about_dialog {
-            egui::Window::new("ℹ About RobotCraft")
+            egui::Window::new("Help")
                 .collapsible(false)
-                .resizable(false)
+                .resizable(true)
+                .default_width(520.0)
                 .show(ui.ctx(), |ui| {
-                    ui.heading("RobotCraft Native Studio");
-                    ui.label("Sovereign zero-runtime-tax robotics studio.");
-                    ui.label(format!("Version: v{APP_VERSION}"));
-                    ui.label(format!("Control Port: {CONTROL_PORT}"));
+                    egui::ScrollArea::vertical()
+                        .max_height(460.0)
+                        .show(ui, |ui| {
+                            ui.heading("Build data");
+                            ui.label(format!("Version: {APP_VERSION}"));
+                            ui.label(format!("Profile: {}", build_profile()));
+                            ui.label(format!("Built: {BUILD_UTC}"));
+                            ui.label(format!("Commit: {GIT_SHA}"));
+                            ui.label(format!("Binary: {}", binary_path()));
+                            ui.label(format!("Control port label: {CONTROL_PORT}"));
+                            ui.separator();
+                            ui.heading("Release");
+                            ui.label(format!("Tag: v{APP_VERSION}"));
+                            ui.hyperlink(format!(
+                            "https://github.com/sandraschi/robotcraft/releases/tag/v{APP_VERSION}"
+                        ));
+                            ui.add_space(6.0);
+                            ui.label(RELEASE_NOTES);
+                        });
                     ui.separator();
-                    ui.label("Integrated kinematics reachability, real-time telemetry & safety kill switch.");
-                    ui.add_space(8.0);
                     if ui.button("Close").clicked() {
                         self.show_about_dialog = false;
                     }
                 });
         }
     }
+}
+
+fn build_profile() -> &'static str {
+    if cfg!(debug_assertions) {
+        "debug"
+    } else {
+        "release"
+    }
+}
+
+fn binary_path() -> String {
+    std::env::current_exe()
+        .map(|path| path.display().to_string())
+        .unwrap_or_else(|_| "unavailable".to_string())
 }
 
 fn main() -> eframe::Result<()> {
