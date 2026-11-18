@@ -5,6 +5,16 @@
 ![MCP stdio](https://img.shields.io/badge/MCP-stdio-purple)
 ![ArtCraft harness](https://img.shields.io/badge/ArtCraft-harness-green)
 
+## Install
+
+Tell Cursor, Claude, Antigravity, or OpenCode: **Install this.**
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install-craft.ps1
+```
+
+Installs the Windows app, the CLI, and the MCP bundle.
+
 **RobotCraft** is the embodied intelligence studio and universal robotics operating workstation for the sandraschi fleet. It consolidates hardware telemetry, forward/inverse kinematics solvers, URDF models, Gazebo simulation bridges, and physical actuator tele-op.
 
 ## Architecture
