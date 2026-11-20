@@ -10,6 +10,7 @@
 
 pub mod i18n;
 pub mod kinematics;
+pub mod skills;
 pub mod urdf;
 
 use crate::kinematics::KinematicsSolver;
@@ -100,9 +101,10 @@ pub async fn dispatch(cmd: Command, _store: &DatabaseStore) -> Value {
                 "version": APP_VERSION,
                 "control_port": CONTROL_PORT,
                 "status": "ready",
-                "active_drivers": ["Yahboom_MCP", "VLA_MCP", "Isaac_MCP"],
+                "active_drivers": ["Yahboom_MCP", "Loona_MCP", "VLA_MCP", "Isaac_MCP"],
                 "peers": {
                     "yahboom_mcp": peers::yahboom_base(),
+                    "loona_mcp": peers::loona_base(),
                     "vla_mcp": peers::vla_base(),
                     "isaac_mcp": peers::isaac_base()
                 },
@@ -116,6 +118,7 @@ pub async fn dispatch(cmd: Command, _store: &DatabaseStore) -> Value {
                     { "id": "saschibot", "name": "Saschibot Mobile Service Bot P6", "dof": 14, "protocol": "Micro-ROS / STS3215 Bus", "has_cad": true, "has_three_js": true },
                     { "id": "nori_a3", "name": "NoriRobotics A3 Mobile Manipulator", "dof": 16, "protocol": "ROS2 DDS / Feetech", "has_cad": true, "has_three_js": true },
                     { "id": "noetix_bumi", "name": "Noetix Bumi Humanoid Robot", "dof": 21, "protocol": "ROS2 Bridge / Jetson Orin", "has_cad": true, "has_three_js": true },
+                    { "id": "loona_petbot", "name": "KEYi Tech Loona Petbot (KY004)", "dof": 6, "protocol": "loona-mcp :11069 (KY004 mTLS :9676 / Binary :13579)", "has_cad": true, "has_three_js": true, "peer": "loona-mcp" },
                     { "id": "unitree_go2", "name": "Unitree Go2 Pro Quadruped", "dof": 12, "protocol": "UDP / Low-Level", "has_cad": false, "has_three_js": true },
                     { "id": "yahboom_rover", "name": "Yahboom ROSMASTER X3 Rover", "dof": 4, "protocol": "yahboom-mcp :10892", "has_cad": false, "has_three_js": true, "peer": "yahboom-mcp" },
                     { "id": "craftarm_6dof", "name": "CraftArm Industrial 6-DOF Manipulator", "dof": 6, "protocol": "CAN Bus / Micro-ROS", "has_cad": true, "has_three_js": true }
@@ -125,6 +128,8 @@ pub async fn dispatch(cmd: Command, _store: &DatabaseStore) -> Value {
         Command::GetTelemetry { robot_id } => {
             if peers::is_yahboom_id(&robot_id) {
                 yahboom_telemetry_response()
+            } else if peers::is_loona_id(&robot_id) {
+                loona_telemetry_response()
             } else {
                 fixture_telemetry(&robot_id)
             }
@@ -150,6 +155,9 @@ pub async fn dispatch(cmd: Command, _store: &DatabaseStore) -> Value {
                 "noetix_bumi" | "bumi" | "noetix" => KinematicsSolver::noetix_bumi_model(),
                 "yahboom_rover" | "yahboom" | "raspbot" | "boomy" | "rosmaster" => {
                     KinematicsSolver::yahboom_rover_model()
+                }
+                "loona_petbot" | "loona" | "petbot" | "ky004" | "keyi_loona" => {
+                    KinematicsSolver::loona_petbot_model()
                 }
                 _ => KinematicsSolver::default_6dof_manipulator(),
             };
@@ -228,6 +236,26 @@ pub async fn dispatch(cmd: Command, _store: &DatabaseStore) -> Value {
                     "rosbridge_endpoint": "ws://bumi.local:9090 (/joint_states, /imu/data, /battery_state)"
                 })
             }
+            "loona_petbot" | "loona" | "petbot" | "ky004" | "keyi_loona" => {
+                json!({
+                    "success": true,
+                    "robot_id": "loona_petbot",
+                    "cad_type": "TEARDOWN_PCB_PINOUT_6DOF_TOPOLOGY",
+                    "kinematic_architecture": "6-DOF Expressive Petbot (2x BLDC Wheels, 2x Brushed Body Posture, 2x Planetary Gear Ears)",
+                    "compute_and_sensors": "Suspected Rockchip RV1126 (5 TOPS BPU, 2GB LPDDR4, 8GB eMMC), 2.4-inch LCD Eyes, 720p RGB + 3D ToF Depth, 4-Mic Array",
+                    "network_ports_ky004": {
+                        "tcp_5555": "Wireless Android Debug Bridge (ADB)",
+                        "tcp_9676": "TLS 1.3 Control & API (CN=KY004, O=KEYi, enforces mTLS client cert)",
+                        "tcp_13579_24680_49152": "Raw TCP Binary Streams (10-byte greeting: ff 00 00 00 00 00 00 00 01 7f)"
+                    },
+                    "joint_structure": {
+                        "wheels": ["wheel_left_bldc (3-phase + Hall)", "wheel_right_bldc (3-phase + Hall)"],
+                        "body": ["body_pitch_joint (H-bridge + encoder)", "body_lift_joint (H-bridge + encoder)"],
+                        "ears": ["ear_left_planetary (2-pin JST)", "ear_right_planetary (2-pin JST)"]
+                    },
+                    "source_repo": "loona-mcp (D:/Dev/repos/loona-mcp/docs/WIFI_PROTOCOL.md & PINOUT.md)"
+                })
+            }
             _ => {
                 json!({
                     "success": false,
@@ -289,6 +317,21 @@ pub async fn dispatch(cmd: Command, _store: &DatabaseStore) -> Value {
                             { "t_sec": 4.5, "hips_pitch": 0.05, "knees": 0.1, "ankles": 0.0, "com_z": 0.85 }
                         ],
                         "summary": "Noetix Bumi executed Zero-Moment Point (ZMP) inverted pendulum balance trajectory, rising smoothly to stable upright stance."
+                    })
+                }
+                ("loona_petbot" | "loona" | "ky004" | "petbot", _) => {
+                    json!({
+                        "workflow": workflow_type,
+                        "partner": "Boomy (yahboom-mcp :10892)",
+                        "protocol_port": 13579,
+                        "greeting_frame_hex": "ff 00 00 00 00 00 00 00 01 7f",
+                        "keyframes": [
+                            { "t_sec": 0.0, "ear_l_rad": 0.2, "ear_r_rad": 0.2, "body_pitch_rad": 0.0, "wheel_omega": 0.0, "frame_hex": "ff 00 00 00 00 00 00 00 01 7f" },
+                            { "t_sec": 1.0, "ear_l_rad": 1.4, "ear_r_rad": 0.3, "body_pitch_rad": 0.35, "wheel_omega": 1.2, "frame_hex": "ff 01 00 02 00 64 00 64 02 7f" },
+                            { "t_sec": 2.0, "ear_l_rad": 0.3, "ear_r_rad": 1.4, "body_pitch_rad": -0.25, "wheel_omega": -1.2, "frame_hex": "ff 02 00 01 00 32 00 32 03 7f" },
+                            { "t_sec": 3.2, "ear_l_rad": 0.9, "ear_r_rad": 0.9, "body_pitch_rad": 0.45, "wheel_omega": 0.0, "frame_hex": "ff 03 00 00 00 10 00 00 04 7f" }
+                        ],
+                        "summary": "KEYi Loona (KY004) executed 6-DOF expressive ear wiggle, body posture bow, and BLDC pirouette synchronized with Boomy (yahboom-mcp)."
                     })
                 }
                 _ => {
@@ -389,6 +432,7 @@ fn hardware_kind(robot_id: &str) -> HardwareKind {
         "yahboom_rover" | "yahboom" | "rover" | "raspbot" | "boomy" | "rosmaster" => {
             HardwareKind::YahboomRover
         }
+        "loona_petbot" | "loona" | "petbot" | "ky004" | "keyi_loona" => HardwareKind::LoonaPetbot,
         _ => HardwareKind::GazeboSimulation,
     }
 }
@@ -402,6 +446,51 @@ fn fixture_telemetry(robot_id: &str) -> Value {
         "note": "Studio fixture. This robot has no live peer in RobotCraft.",
         "telemetry": telem
     })
+}
+
+fn loona_telemetry_response() -> Value {
+    let mut body = fixture_telemetry("loona_petbot");
+    if peers::loona_base().is_none() {
+        if let Some(obj) = body.as_object_mut() {
+            obj.insert(
+                "note".to_string(),
+                json!("loona-mcp disabled (ROBOTCRAFT_LOONA_URL=off)"),
+            );
+        }
+        return body;
+    }
+    match peers::loona_status() {
+        Ok(raw) => {
+            let live = raw
+                .pointer("/hardware_status/loona_connected")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            if let Some(obj) = body.as_object_mut() {
+                obj.insert("live".to_string(), json!(live));
+                obj.insert("source".to_string(), json!("loona-mcp"));
+                obj.insert("peer".to_string(), raw);
+                obj.insert(
+                    "note".to_string(),
+                    json!(if live {
+                        "loona-mcp (:11069) connected to KEYi Loona (KY004)."
+                    } else {
+                        "loona-mcp (:11069) is online (ADB ready; KY004 ports 9676/13579/24680 standby). Joint metrics below are studio fixture until Loona powers on."
+                    }),
+                );
+            }
+            body
+        }
+        Err(err) => {
+            if let Some(obj) = body.as_object_mut() {
+                obj.insert("peer_error".to_string(), json!(err));
+                obj.insert(
+                    "note".to_string(),
+                    json!("loona-mcp (:11069) is not running. Numbers below are a studio fixture."),
+                );
+            }
+            body
+        }
+    }
 }
 
 fn yahboom_telemetry_response() -> Value {

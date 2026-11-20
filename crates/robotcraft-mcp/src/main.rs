@@ -9,7 +9,11 @@
 
 use clap::{Parser, Subcommand};
 use databasecraft_store::DatabaseStore;
-use robotcraft_core::{dispatch, Command, APP_VERSION, CONTROL_PORT};
+use robotcraft_core::{
+    dispatch,
+    skills::{bundled_skills, get_skill},
+    Command, APP_VERSION, CONTROL_PORT,
+};
 use serde_json::{json, Value};
 use std::io::{BufRead, Write};
 use tokio::runtime::Runtime;
@@ -279,7 +283,7 @@ fn run_mcp_stdio(rt: &Runtime, store: &DatabaseStore) {
                 "id": id,
                 "result": {
                     "protocolVersion": "2024-11-05",
-                    "capabilities": { "tools": {} },
+                    "capabilities": { "tools": {}, "resources": {} },
                     "serverInfo": { "name": "robotcraft-mcp", "version": APP_VERSION }
                 }
             }),
@@ -375,6 +379,20 @@ fn run_mcp_stdio(rt: &Runtime, store: &DatabaseStore) {
                                     "confirm": { "type": "boolean" }
                                 },
                                 "required": ["scene_name"]
+                            }
+                        },
+                        {
+                            "name": "robotcraft_skill_read",
+                            "description": "Read a bundled RobotCraft skill (SKILL.md) by id or robotcraft://skills/ URI.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "string",
+                                        "description": "Skill id (e.g. 'robotcraft-workflow', 'robotcraft-urdf-kinematics', 'robotcraft-safety') or URI."
+                                    }
+                                },
+                                "required": ["id"]
                             }
                         }
                     ]
@@ -484,6 +502,27 @@ fn run_mcp_stdio(rt: &Runtime, store: &DatabaseStore) {
                             store,
                         ))
                     }
+                    "robotcraft_skill_read" => {
+                        let key = args["id"].as_str().unwrap_or("");
+                        match get_skill(key) {
+                            Some(skill) => json!({
+                                "success": true,
+                                "id": skill.id,
+                                "title": skill.title,
+                                "uri": skill.uri,
+                                "content": skill.content
+                            }),
+                            None => {
+                                let available: Vec<&str> =
+                                    bundled_skills().iter().map(|s| s.id).collect();
+                                json!({
+                                    "success": false,
+                                    "error": format!("Unknown skill '{key}'"),
+                                    "available": available
+                                })
+                            }
+                        }
+                    }
                     unknown => {
                         json!({ "success": false, "error": format!("Unknown tool '{unknown}'") })
                     }
@@ -494,6 +533,48 @@ fn run_mcp_stdio(rt: &Runtime, store: &DatabaseStore) {
                     "id": id,
                     "result": { "content": [{ "type": "text", "text": tool_res.to_string() }] }
                 })
+            }
+            "resources/list" => {
+                let resources: Vec<Value> = bundled_skills()
+                    .iter()
+                    .map(|skill| {
+                        json!({
+                            "uri": skill.uri,
+                            "name": skill.title,
+                            "description": skill.summary,
+                            "mimeType": "text/markdown"
+                        })
+                    })
+                    .collect();
+                json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": { "resources": resources }
+                })
+            }
+            "resources/read" => {
+                let uri = req
+                    .pointer("/params/uri")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                match get_skill(uri) {
+                    Some(skill) => json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "result": {
+                            "contents": [{
+                                "uri": skill.uri,
+                                "mimeType": "text/markdown",
+                                "text": skill.content
+                            }]
+                        }
+                    }),
+                    None => json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "error": { "code": -32602, "message": format!("Unknown resource URI '{uri}'") }
+                    }),
+                }
             }
             _ => {
                 json!({ "jsonrpc": "2.0", "id": id, "error": { "code": -32601, "message": "Method not found" } })

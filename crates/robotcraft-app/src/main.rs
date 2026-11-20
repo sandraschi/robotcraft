@@ -8,9 +8,16 @@
 #![deny(clippy::unimplemented)]
 #![deny(clippy::todo)]
 
+mod help_ui;
+
 use databasecraft_store::DatabaseStore;
 use eframe::egui::{self, Color32, Vec2};
+use help_ui::HelpTab;
 use robotcraft_core::{dispatch, Command, APP_VERSION, CONTROL_PORT};
+
+pub(crate) const BUILD_UTC: &str = env!("ROBOTCRAFT_BUILD_UTC");
+pub(crate) const GIT_SHA: &str = env!("ROBOTCRAFT_GIT_SHA");
+pub(crate) const RELEASE_NOTES: &str = include_str!("../../../CHANGELOG_LATEST.md");
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
@@ -51,7 +58,16 @@ pub struct RobotCraftGui {
     pub auth_username: String,
     pub auth_password_input: String,
     pub show_auth_modal: bool,
-    pub show_about_dialog: bool,
+    pub show_help_center: bool,
+    pub help_tab: HelpTab,
+    pub selected_skill_idx: usize,
+    pub selected_doc_idx: usize,
+    pub show_command_palette: bool,
+    pub command_palette_query: String,
+    pub show_shortcuts_dialog: bool,
+    pub show_ai_chat_dock: bool,
+    pub ai_chat_input: String,
+    pub ai_chat_history: Vec<(String, String)>,
     pub virtual_x: f32,
     pub virtual_y: f32,
     pub virtual_yaw: f32,
@@ -100,7 +116,19 @@ impl RobotCraftGui {
             auth_username: "teleoperator".to_string(),
             auth_password_input: String::new(),
             show_auth_modal: false,
-            show_about_dialog: false,
+            show_help_center: false,
+            help_tab: HelpTab::GetStarted,
+            selected_skill_idx: 0,
+            selected_doc_idx: 0,
+            show_command_palette: false,
+            command_palette_query: String::new(),
+            show_shortcuts_dialog: false,
+            show_ai_chat_dock: false,
+            ai_chat_input: String::new(),
+            ai_chat_history: vec![(
+                "RobotCraft".to_string(),
+                "Local-first assistant ready. Ask about `status`, `peers`, `robots`, `urdf`, `safety`, or `skills`.".to_string(),
+            )],
             virtual_x: 0.0,
             virtual_y: 0.0,
             virtual_yaw: 0.0,
@@ -620,13 +648,55 @@ fn draw_3d_sphere_node(
     painter.circle_stroke(p, r_screen.max(4.0), egui::Stroke::new(1.5, Color32::WHITE));
 }
 
+fn harsh_visuals() -> egui::Visuals {
+    let mut visuals = egui::Visuals::dark();
+    let ink = Color32::from_rgb(242, 246, 252);
+    visuals.override_text_color = Some(ink);
+    visuals.window_fill = Color32::from_rgb(2, 6, 18);
+    visuals.panel_fill = Color32::from_rgb(10, 18, 34);
+    visuals.extreme_bg_color = Color32::from_rgb(2, 6, 18);
+    visuals.code_bg_color = Color32::from_rgb(4, 10, 24);
+    visuals.faint_bg_color = Color32::from_rgb(16, 28, 50);
+    visuals.warn_fg_color = Color32::from_rgb(255, 200, 120);
+    visuals.error_fg_color = Color32::from_rgb(255, 130, 130);
+    visuals.widgets.noninteractive.fg_stroke =
+        egui::Stroke::new(1.0, Color32::from_rgb(210, 220, 235));
+    visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, ink);
+    visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.5, Color32::WHITE);
+    visuals.widgets.active.fg_stroke = egui::Stroke::new(1.5, Color32::WHITE);
+    visuals.selection.bg_fill = Color32::from_rgb(36, 64, 107);
+    visuals.selection.stroke = egui::Stroke::new(1.0, Color32::WHITE);
+    visuals.hyperlink_color = Color32::from_rgb(147, 197, 253);
+    visuals.weak_text_color = Some(Color32::from_rgb(203, 213, 225));
+    visuals
+}
+
+fn crisp_light_visuals() -> egui::Visuals {
+    let mut visuals = egui::Visuals::light();
+    let ink = Color32::BLACK;
+    visuals.override_text_color = Some(ink);
+    visuals.weak_text_color = Some(ink);
+    visuals.window_fill = Color32::WHITE;
+    visuals.panel_fill = Color32::WHITE;
+    visuals.extreme_bg_color = Color32::WHITE;
+    visuals.faint_bg_color = Color32::WHITE;
+    visuals.widgets.noninteractive.fg_stroke = egui::Stroke::new(1.0, ink);
+    visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, ink);
+    visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.5, ink);
+    visuals.widgets.active.fg_stroke = egui::Stroke::new(1.5, ink);
+    visuals.widgets.open.fg_stroke = egui::Stroke::new(1.0, ink);
+    visuals.hyperlink_color = Color32::from_rgb(3, 105, 161);
+    visuals
+}
+
 impl eframe::App for RobotCraftGui {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        if self.is_dark_theme {
-            ui.ctx().set_visuals(egui::Visuals::dark());
+        help_ui::handle_global_shortcuts(self, ui.ctx());
+        ui.ctx().set_visuals(if self.is_dark_theme {
+            harsh_visuals()
         } else {
-            ui.ctx().set_visuals(egui::Visuals::light());
-        }
+            crisp_light_visuals()
+        });
 
         let cyan = Color32::from_rgb(6, 182, 212);
         let red_estop = Color32::from_rgb(239, 68, 68);
@@ -634,7 +704,7 @@ impl eframe::App for RobotCraftGui {
         // 0. Desktop Menu Bar
         egui::Panel::top("desktop_menu_bar").show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.menu_button("File", |ui| {
+                let r_file = ui.menu_button("File", |ui| {
                     if ui.button("Sync Joint States").clicked() {
                         self.fetch_telemetry();
                         ui.close();
@@ -649,7 +719,7 @@ impl eframe::App for RobotCraftGui {
                     }
                 });
 
-                ui.menu_button("Robots", |ui| {
+                let r_robots = ui.menu_button("Robots", |ui| {
                     if ui.button("Saschibot Mobile Service Bot P6").clicked() {
                         self.selected_robot = "saschibot".to_string();
                         self.fetch_telemetry();
@@ -664,6 +734,12 @@ impl eframe::App for RobotCraftGui {
                     }
                     if ui.button("Noetix Bumi Bipedal Humanoid").clicked() {
                         self.selected_robot = "noetix_bumi".to_string();
+                        self.fetch_telemetry();
+                        self.fetch_cad();
+                        ui.close();
+                    }
+                    if ui.button("KEYi Loona Petbot (KY004 / loona-mcp)").clicked() {
+                        self.selected_robot = "loona_petbot".to_string();
                         self.fetch_telemetry();
                         self.fetch_cad();
                         ui.close();
@@ -691,7 +767,17 @@ impl eframe::App for RobotCraftGui {
                     }
                 });
 
-                ui.menu_button("View", |ui| {
+                let r_view = ui.menu_button("View", |ui| {
+                    let chat_label = if self.show_ai_chat_dock {
+                        "✓ AI Chat Dock (Ctrl+J)"
+                    } else {
+                        "AI Chat Dock (Ctrl+J)"
+                    };
+                    if ui.button(chat_label).clicked() {
+                        self.show_ai_chat_dock = !self.show_ai_chat_dock;
+                        ui.close();
+                    }
+                    ui.separator();
                     let theme_label = if self.is_dark_theme {
                         "☀ Switch to Light Theme"
                     } else {
@@ -703,7 +789,7 @@ impl eframe::App for RobotCraftGui {
                     }
                 });
 
-                ui.menu_button("Security", |ui| {
+                let r_security = ui.menu_button("Security", |ui| {
                     if self.is_authenticated {
                         ui.label(format!("Operator: {}", self.auth_username));
                         if ui.button("Sign Out").clicked() {
@@ -711,20 +797,61 @@ impl eframe::App for RobotCraftGui {
                             self.status_message = "Signed out".to_string();
                             ui.close();
                         }
-                    } else {
-                        if ui.button("Basic Auth Login...").clicked() {
-                            self.show_auth_modal = true;
-                            ui.close();
-                        }
-                    }
-                });
-
-                ui.menu_button("Help", |ui| {
-                    if ui.button("About RobotCraft").clicked() {
-                        self.show_about_dialog = true;
+                    } else if ui.button("Basic Auth Login...").clicked() {
+                        self.show_auth_modal = true;
                         ui.close();
                     }
                 });
+
+                let r_help = ui.menu_button("Help", |ui| {
+                    if ui.button("Command Palette... (Ctrl+Shift+P)").clicked() {
+                        self.show_command_palette = true;
+                        self.command_palette_query.clear();
+                        ui.close();
+                    }
+                    if ui.button("Keyboard Shortcuts... (F1)").clicked() {
+                        self.show_shortcuts_dialog = true;
+                        ui.close();
+                    }
+                    ui.separator();
+                    for (label, tab) in [
+                        ("Getting Started...", HelpTab::GetStarted),
+                        ("Usage (GUI, CLI & MCP)...", HelpTab::Usage),
+                        ("Tips & Tricks...", HelpTab::TipsAndTricks),
+                        ("Common Pitfalls & Safety...", HelpTab::PitfallsAndSafety),
+                        ("Planned Extensions...", HelpTab::PlannedExtensions),
+                        ("Bundled Skills...", HelpTab::BundledSkills),
+                        ("Project Files & Docs...", HelpTab::ProjectDocs),
+                    ] {
+                        if ui.button(label).clicked() {
+                            self.help_tab = tab;
+                            self.show_help_center = true;
+                            ui.close();
+                        }
+                    }
+                    ui.separator();
+                    if ui.button("Licenses & Notices...").clicked() {
+                        self.help_tab = HelpTab::Licenses;
+                        self.show_help_center = true;
+                        ui.close();
+                    }
+                    if ui.button("About RobotCraft").clicked() {
+                        self.help_tab = HelpTab::About;
+                        self.show_help_center = true;
+                        ui.close();
+                    }
+                });
+
+                help_ui::switch_on_hover(
+                    ui.ctx(),
+                    &[
+                        r_file.response,
+                        r_robots.response,
+                        r_view.response,
+                        r_security.response,
+                        r_help.response,
+                    ],
+                );
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let cur_loc = self.locale;
@@ -767,17 +894,17 @@ impl eframe::App for RobotCraftGui {
                 );
                 ui.separator();
                 ui.label(format!("v{APP_VERSION}"));
-                ui.colored_label(
-                    Color32::from_rgb(148, 163, 184),
-                    format!("| Port {CONTROL_PORT}"),
-                );
+                ui.label(format!("| Port {CONTROL_PORT}"));
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui
-                        .button(
-                            egui::RichText::new("⛔ EMERGENCY STOP")
-                                .color(Color32::WHITE)
-                                .strong(),
+                        .add(
+                            egui::Button::new(
+                                egui::RichText::new("EMERGENCY STOP")
+                                    .color(Color32::WHITE)
+                                    .strong(),
+                            )
+                            .fill(red_estop),
                         )
                         .clicked()
                     {
@@ -804,8 +931,8 @@ impl eframe::App for RobotCraftGui {
                 ui.add_space(4.0);
 
                 let nav_btn = |ui: &mut egui::Ui, active: bool, text: &str| -> bool {
-                    let rich =
-                        egui::RichText::new(text).color(if active { cyan } else { Color32::WHITE });
+                    let idle = ui.visuals().text_color();
+                    let rich = egui::RichText::new(text).color(if active { cyan } else { idle });
                     ui.selectable_label(active, rich).clicked()
                 };
 
@@ -881,6 +1008,8 @@ impl eframe::App for RobotCraftGui {
             });
 
         // 4. Central Panel
+        help_ui::render_ai_chat_dock(self, ui);
+
         egui::CentralPanel::default().show(ui, |ui| match self.active_workspace {
             ActiveWorkspace::ThreeJsViewer => {
                 ui.heading("🪐 Three.js 3D Virtual Robot Viewer");
@@ -903,6 +1032,11 @@ impl eframe::App for RobotCraftGui {
                     }
                     if ui.selectable_label(self.selected_robot == "noetix_bumi", "🤖 Noetix Bumi (21-DOF)").clicked() {
                         self.selected_robot = "noetix_bumi".to_string();
+                        self.fetch_telemetry();
+                        self.fetch_cad();
+                    }
+                    if ui.selectable_label(self.selected_robot == "loona_petbot", "🐾 KEYi Loona (6-DOF KY004)").clicked() {
+                        self.selected_robot = "loona_petbot".to_string();
                         self.fetch_telemetry();
                         self.fetch_cad();
                     }
@@ -1062,6 +1196,21 @@ impl eframe::App for RobotCraftGui {
                         draw_3d_box(&painter, [0.06, 0.0, 0.14], [0.04, 0.04, 0.10], Color32::from_rgb(51, 65, 85), Color32::WHITE, self.viewer_yaw, self.viewer_pitch, self.viewer_zoom, vp_center, wire);
                         draw_3d_box(&painter, [0.09, 0.0, 0.18], [0.04, 0.06, 0.03], Color32::from_rgb(6, 182, 212), Color32::WHITE, self.viewer_yaw, self.viewer_pitch, self.viewer_zoom, vp_center, wire);
                     }
+                    "loona_petbot" => {
+                        // KEYi Loona (KY004) 6-DOF Petbot: 2x BLDC Wheels, Body Posture Chassis, Head with 2.4" LCD Eyes + ToF, 2x Planetary Ears
+                        // Large BLDC side wheels
+                        draw_3d_cylinder(&painter, [-0.02, 0.11, 0.075], 0.075, 0.035, Color32::from_rgb(15, 23, 42), Color32::from_rgb(245, 158, 11), self.viewer_yaw, self.viewer_pitch, self.viewer_zoom, vp_center, wire);
+                        draw_3d_cylinder(&painter, [-0.02, -0.11, 0.075], 0.075, 0.035, Color32::from_rgb(15, 23, 42), Color32::from_rgb(245, 158, 11), self.viewer_yaw, self.viewer_pitch, self.viewer_zoom, vp_center, wire);
+                        // White & Slate Body Chassis + Posture Linkage
+                        draw_3d_box(&painter, [0.0, 0.0, 0.11], [0.21, 0.15, 0.10], Color32::from_rgb(241, 245, 249), Color32::from_rgb(148, 163, 184), self.viewer_yaw, self.viewer_pitch, self.viewer_zoom, vp_center, wire);
+                        draw_3d_sphere_node(&painter, [0.05, 0.0, 0.18], 0.035, Color32::from_rgb(245, 158, 11), self.viewer_yaw, self.viewer_pitch, self.viewer_zoom, vp_center);
+                        // Expressive Head Cube + 2.4" LCD Face Visor
+                        draw_3d_box(&painter, [0.08, 0.0, 0.25], [0.14, 0.16, 0.13], Color32::from_rgb(248, 250, 252), Color32::from_rgb(203, 213, 225), self.viewer_yaw, self.viewer_pitch, self.viewer_zoom, vp_center, wire);
+                        draw_3d_box(&painter, [0.152, 0.0, 0.25], [0.015, 0.13, 0.095], Color32::from_rgb(6, 182, 212), Color32::WHITE, self.viewer_yaw, self.viewer_pitch, self.viewer_zoom, vp_center, wire);
+                        // 2x Planetary-Gear Expressive Ears (Amber/Gold)
+                        draw_3d_box(&painter, [0.07, 0.105, 0.34], [0.07, 0.03, 0.08], Color32::from_rgb(245, 158, 11), Color32::WHITE, self.viewer_yaw, self.viewer_pitch, self.viewer_zoom, vp_center, wire);
+                        draw_3d_box(&painter, [0.07, -0.105, 0.34], [0.07, 0.03, 0.08], Color32::from_rgb(245, 158, 11), Color32::WHITE, self.viewer_yaw, self.viewer_pitch, self.viewer_zoom, vp_center, wire);
+                    }
                     "nori_a3" => {
                         // Cylindrical molded base shell (Z=0.08, r=0.25, h=0.16)
                         draw_3d_cylinder(&painter, [0.0, 0.0, 0.08], 0.25, 0.16, Color32::from_rgb(241, 245, 249), Color32::from_rgb(148, 163, 184), self.viewer_yaw, self.viewer_pitch, self.viewer_zoom, vp_center, wire);
@@ -1126,15 +1275,16 @@ impl eframe::App for RobotCraftGui {
                 let bot_label = match self.selected_robot.as_str() {
                     "saschibot" => "🤖 Saschibot P6 (14-DOF Bimanual + Mast)",
                     "nori_a3" => "🤖 NoriRobotics A3 (16-DOF Manipulator)",
+                    "loona_petbot" => "🐾 KEYi Loona KY004 (6-DOF Petbot · loona-mcp)",
                     "yahboom_rover" => "🛞 Yahboom ROSMASTER (yahboom-mcp)",
                     _ => "🤖 Noetix Bumi (21-DOF Bipedal Humanoid)",
                 };
                 painter.text(hud_rect.min + egui::vec2(10.0, 10.0), egui::Align2::LEFT_TOP, bot_label, egui::FontId::proportional(13.0), cyan);
-                painter.text(hud_rect.min + egui::vec2(10.0, 28.0), egui::Align2::LEFT_TOP, "● Local viewport (not a live twin)", egui::FontId::proportional(11.0), Color32::from_rgb(148, 163, 184));
-                painter.text(hud_rect.min + egui::vec2(10.0, 46.0), egui::Align2::LEFT_TOP, format!("Azimuth: {:.0}° | Elev: {:.0}° | Zoom: {:.1}x", self.viewer_yaw.to_degrees(), self.viewer_pitch.to_degrees(), self.viewer_zoom), egui::FontId::proportional(10.5), Color32::from_rgb(148, 163, 184));
+                painter.text(hud_rect.min + egui::vec2(10.0, 28.0), egui::Align2::LEFT_TOP, "● Local viewport (not a live twin)", egui::FontId::proportional(11.0), Color32::from_rgb(242, 246, 252));
+                painter.text(hud_rect.min + egui::vec2(10.0, 46.0), egui::Align2::LEFT_TOP, format!("Azimuth: {:.0}° | Elev: {:.0}° | Zoom: {:.1}x", self.viewer_yaw.to_degrees(), self.viewer_pitch.to_degrees(), self.viewer_zoom), egui::FontId::proportional(10.5), Color32::from_rgb(242, 246, 252));
 
                 // Bottom-right hint
-                painter.text(vp_rect.max - egui::vec2(12.0, 12.0), egui::Align2::RIGHT_BOTTOM, "🖱 Drag: Orbit | Scroll: Zoom", egui::FontId::proportional(11.0), Color32::from_rgb(100, 116, 139));
+                painter.text(vp_rect.max - egui::vec2(12.0, 12.0), egui::Align2::RIGHT_BOTTOM, "Drag: Orbit | Scroll: Zoom", egui::FontId::proportional(11.0), Color32::from_rgb(242, 246, 252));
 
                 ui.add_space(8.0);
 
@@ -1194,6 +1344,11 @@ impl eframe::App for RobotCraftGui {
                                 ui.label("• nori.expanded.urdf (Full kinematics model)");
                                 ui.label("• Printables: ear-pucks.stl, RPLiDar C1 mount");
                             }
+                            "loona_petbot" => {
+                                ui.label("• 6-DOF: 2x BLDC Wheels, 2x Body Tilt, 2x Planetary Ears");
+                                ui.label("• Compute: 5 TOPS BPU (RV1126), 2.4\" LCD, 3D ToF + 720p RGB");
+                                ui.label("• Partner: Synchronized Dance with Boomy (yahboom-mcp)");
+                            }
                             _ => {
                                 ui.label("• Kinematics: 21-DOF Bipedal Architecture");
                                 ui.label("• Height: 1200mm | Mass: 18.5kg | Orin Brain");
@@ -1214,6 +1369,11 @@ impl eframe::App for RobotCraftGui {
                                 ui.label("• Protocol: ROS 2 DDS / Feetech");
                                 ui.label("• Battery: 88.0% | LIDAR: 600 RPM Active");
                                 ui.label("• Arms: 16-DOF Calibrated");
+                            }
+                            "loona_petbot" => {
+                                ui.label("• Peer: loona-mcp (:11069) | ADB & LAN Scanner Ready");
+                                ui.label("• Ports: 9676 (KY004 mTLS 1.3), 13579/24680 (0xFF..0x7F)");
+                                ui.label("• Greeting: ff 00 00 00 00 00 00 00 01 7f");
                             }
                             _ => {
                                 ui.label("• Protocol: rosbridge /ws (:9090)");
@@ -1297,6 +1457,10 @@ impl eframe::App for RobotCraftGui {
                         self.selected_robot = "noetix_bumi".to_string();
                         self.fetch_cad();
                     }
+                    if ui.selectable_label(self.selected_robot == "loona_petbot", "KEYi Loona (KY004) PCB & Topology").clicked() {
+                        self.selected_robot = "loona_petbot".to_string();
+                        self.fetch_cad();
+                    }
                 });
 
                 ui.add_space(8.0);
@@ -1367,7 +1531,7 @@ impl eframe::App for RobotCraftGui {
                                 for (i, t) in temps.iter().enumerate() {
                                     ui.group(|ui| {
                                         ui.label(format!("M{}", i + 1));
-                                        ui.colored_label(Color32::WHITE, format!("{:.1}°", t.as_f64().unwrap_or(0.0)));
+                                        ui.colored_label(ui.visuals().text_color(), format!("{:.1}°", t.as_f64().unwrap_or(0.0)));
                                     });
                                 }
                             });
@@ -1575,8 +1739,9 @@ impl eframe::App for RobotCraftGui {
                     ("saschibot", "Saschibot Mobile Service Bot P6", "Mobile Bimanual", "14-DOF", "Micro-ROS / STS3215"),
                     ("nori_a3", "NoriRobotics A3 Mobile Manipulator", "Wheeled Arm", "16-DOF", "ROS2 DDS / Feetech"),
                     ("noetix_bumi", "Noetix Bumi Humanoid", "Biped Humanoid", "21-DOF", "rosbridge / Jetson Orin"),
+                    ("loona_petbot", "KEYi Tech Loona Petbot (KY004)", "Expressive Petbot", "6-DOF", "loona-mcp :11069 (mTLS :9676 / Binary :13579)"),
                     ("unitree_go2", "Unitree Go2 Pro", "Quadruped", "12-DOF", "UDP / CycloneDDS"),
-                    ("yahboom_rover", "Yahboom ROSMASTER X3", "Rover", "4-DOF", "Serial UART / Jetbot"),
+                    ("yahboom_rover", "Yahboom ROSMASTER X3", "Rover", "4-DOF", "yahboom-mcp :10892 / Serial UART"),
                     ("craftarm_6dof", "CraftArm Industrial Manipulator", "Arm", "6-DOF", "CAN Bus / Micro-ROS"),
                 ];
 
@@ -1587,7 +1752,7 @@ impl eframe::App for RobotCraftGui {
                             if is_sel {
                                 ui.colored_label(cyan, format!("● ACTIVE: {name}"));
                             } else {
-                                ui.colored_label(Color32::WHITE, name);
+                                ui.colored_label(ui.visuals().text_color(), name);
                             }
                             ui.label(format!("• {cat} • {dof} • {proto}"));
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -1635,25 +1800,24 @@ impl eframe::App for RobotCraftGui {
                 });
         }
 
-        // Modal: About Dialog
-        if self.show_about_dialog {
-            egui::Window::new("ℹ About RobotCraft")
-                .collapsible(false)
-                .resizable(false)
-                .show(ui.ctx(), |ui| {
-                    ui.heading("RobotCraft Native Studio");
-                    ui.label("Sovereign zero-runtime-tax robotics studio.");
-                    ui.label(format!("Version: v{APP_VERSION}"));
-                    ui.label(format!("Control Port: {CONTROL_PORT}"));
-                    ui.separator();
-                    ui.label("Integrated kinematics reachability, real-time telemetry & safety kill switch.");
-                    ui.add_space(8.0);
-                    if ui.button("Close").clicked() {
-                        self.show_about_dialog = false;
-                    }
-                });
-        }
+        help_ui::render_help_center(self, ui.ctx());
+        help_ui::render_command_palette(self, ui.ctx());
+        help_ui::render_shortcuts_dialog(self, ui.ctx());
     }
+}
+
+pub(crate) fn build_profile() -> &'static str {
+    if cfg!(debug_assertions) {
+        "debug"
+    } else {
+        "release"
+    }
+}
+
+pub(crate) fn binary_path() -> String {
+    std::env::current_exe()
+        .map(|path| path.display().to_string())
+        .unwrap_or_else(|_| "unavailable".to_string())
 }
 
 fn main() -> eframe::Result<()> {
