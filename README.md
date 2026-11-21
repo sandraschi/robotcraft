@@ -1,72 +1,92 @@
 # RobotCraft
 
-Embodied intelligence studio and robotics operating workstation uniting URDF kinematics, safety-gated teleoperation, VLA/Isaac peer bridges, and a stdio MCP server in pure Rust.
-
 ![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)
 ![Rust 1.90+](https://img.shields.io/badge/rust-1.90%2B-orange?logo=rust)
 ![MCP stdio](https://img.shields.io/badge/MCP-stdio-purple)
 ![ArtCraft harness](https://img.shields.io/badge/ArtCraft-harness-green)
 
-## What You Can Do
-
-**How it runs:** Native `egui` studio (`robotcraft-app`), CLI (`robotcraft-cli`), and pure-stdio MCP `2024-11-05` server (`robotcraft-cli --mcp`) sharing `robotcraft-core`. Live hardware and simulation policies stay in peer servers; no listening port is opened by the studio.
-
-- **Nori URDF 3D Viewport & Kinematics:** Load `nori.expanded.urdf` (or `ROBOTCRAFT_NORI_URDF`), pose joint sliders in the local 3D viewport, and test planar forward kinematics and target reachability (`0.10 m` to `0.85 m`).
-- **Safety-Gated Teleop & E-Stop:** Motion commands (`forward`, `backward`, `turn_*`, `strafe_*`) and Isaac job starts require explicit `confirm: true`; zero twists and `stop_all` / e-stop execute immediately without a confirm gate.
-- **Fleet Peer Bridges:** Connect to `yahboom-mcp` (`:10892`), `loona-mcp` (`:11069`), `vla-mcp` (`:11024`), and `isaac-mcp` (`:11049`), or disable any peer via `ROBOTCRAFT_*_URL=off`.
-- **Honest Labeled Fixtures:** Saschibot, Nori A3, Bumi, Unitree, and CraftArm telemetry is explicitly marked `source: studio-fixture`; Yahboom telemetry is `live` only when `yahboom-mcp` reports live hardware.
-- **12 MCP Tools & Bundled Skills:** Drive everything from Claude or Cursor via 12 MCP tools (`robot_status`, `robot_teleop`, `urdf_pose`, `vla_call`, `isaac_start`, etc.) and read bundled skills via `resources/list` / `resources/read` (`robotcraft://skills/<id>`).
-- **AI Chat Dock & Help Center:** Press `Ctrl+J` for the local-first AI Chat Dock, `Ctrl+Shift+P` or `Ctrl+K` for the **Command Palette**, and use the Help Center for operator guides and shortcuts.
+**RobotCraft** is the embodied intelligence studio and universal robotics operating workstation for the sandraschi fleet. It consolidates hardware telemetry, forward/inverse kinematics solvers, URDF models, Gazebo simulation bridges, and physical actuator tele-op.
 
 ## Install
 
-1. Download **`robotcraft-0.3.0-setup.exe`** from the [latest release](https://github.com/sandraschi/robotcraft/releases/latest).
-2. Run the installer (if Windows SmartScreen appears on an unsigned build, choose **More info > Run anyway**).
-3. Launch **RobotCraft** from the Start menu.
-
-**Only want the MCP tools in Claude Desktop?** Download `robotcraft-0.3.0.mcpb` from the same release and open it with Claude Desktop (this registers the MCP server only and does **not** install the desktop app):
-
-> Install the robotcraft MCP extension: download `robotcraft-0.3.0.mcpb` from https://github.com/sandraschi/robotcraft/releases/latest and open it with Claude Desktop.
-
-**From a local checkout (Windows app, CLI, and MCP bundle):**
+From a local checkout (Windows):
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install-craft.ps1
 ```
 
-For source builds, peer URL overrides, and CLI examples, see [HELP.md](HELP.md) and [docs/](docs/).
+Installs the Windows app and the CLI (Start Menu shortcut, CLI on the user PATH). `-RegisterClients` also registers the MCP exe with the IDEs that are installed. `-Clients cursor,claude-desktop` limits that list. `-Mcpb` installs the Claude Desktop extension bundle.
 
-## Example Prompts
+## Architecture
 
-> "List all configured robots and check which fleet peers (`yahboom-mcp`, `vla-mcp`, `isaac-mcp`) are online."
+Version **0.3.0**. Four crates. The studio does not bind port 14116; that number is a control id in status JSON. Live hardware and policies stay in the peer servers.
 
-> "Pose the Nori URDF joints in `urdf_pose` and verify target reachability before sending a confirmed teleop move."
+| Crate | Role |
+|---|---|
+| `robotcraft-hal` | HTTP peers. Yahboom on `:10892`, VLA on `:11024`, Isaac on `:11049`. Fixture telemetry for robots with no peer. |
+| `robotcraft-core` | `Command::dispatch`. URDF loader (Nori file), planar forward kinematics, reachability sphere. |
+| `robotcraft-mcp` | Stdio MCP `2024-11-05` and `robotcraft-cli`. |
+| `robotcraft-app` | egui studio: local 3D viewport, Yahboom deck, VLA studio. |
 
-> "Prepare a `vla_wall` inference plan for `raspbot` with task hint 'drive to the doorway and stop'."
+`web/three_viewer.html` is a separate browser viewport. It does not call the peers.
 
-## Workspace Layout
+## Fleet peers
+
+| Peer | Default | What RobotCraft calls |
+|---|---|---|
+| `yahboom-mcp` | `http://127.0.0.1:10892` | `GET /api/v1/health`, `GET /api/v1/telemetry`, `POST /api/v1/control/tool`, `POST /api/v1/control/move`, `POST /api/v1/stop_all` |
+| `vla-mcp` | `http://127.0.0.1:11024` | `GET /api/health`, `GET /api/v1/status`, `GET /api/v1/tools`, `GET /api/v1/fleet`, `GET /api/v1/dataset/episodes`, `POST /api/v1/control/{tool}` |
+| `isaac-mcp` | `http://127.0.0.1:11049` | `GET /api/health`, `GET /api/scenes`, `POST /api/jobs/start` (confirm) |
+
+Disable a peer with `ROBOTCRAFT_YAHBOOM_URL=off`, `ROBOTCRAFT_VLA_URL=off`, or `ROBOTCRAFT_ISAAC_URL=off`. Any other value replaces the base URL (no trailing slash required).
+
+## Nori URDF
+
+`urdf` loads `D:\Dev\repos\norirobotics-mcp\models\nori_description\urdf\nori.expanded.urdf`, or `ROBOTCRAFT_NORI_URDF` when that is set. The studio draws those link frames when Nori is selected. Joint sliders re-pose the same file. Mesh STLs are not loaded. A link with only a mesh uses its collision box, or a 4 cm cube.
+
+**Confirm.** `forward`, `backward`, `turn_left`, `turn_right`, `strafe_left`, and `strafe_right` return `confirm_required` and do not post until `confirm` is true. A zero twist and `stop` / `stop_all` / e-stop post `stop_all` without that flag. VLA `download` is the only weight call that sends `X-VLA-Confirm: 1`, and only when `confirm` is true. `vla_training` and `vla_agentic_workflow` are rejected. Isaac `POST /api/jobs/start` also requires `confirm`.
+
+**Fixtures.** Saschibot, Nori A3, Bumi, Unitree, and CraftArm telemetry is `source: studio-fixture`. Yahboom telemetry is live only when `yahboom-mcp` returns `status: live`. If the server is up and the robot bridge is down, the response keeps the fixture body, sets `live: false`, and copies the server's note (for example "Robot bridge disconnected").
+
+Allowed VLA calls: `vla_wall` `health` / `infer_prepare` / `list_tasks`; `vla_xvla` `health` / `list_targets` / `infer_prepare` / `peft_config_template`; `vla_weights` `list_models` / `local_status` / `download`; `vla_world_model` `health`.
+
+## CLI
+
+From `start.ps1 -Cli`, or `cargo run -p robotcraft-mcp --`:
 
 ```text
-robotcraft/
-|-- crates/robotcraft-hal/    # HTTP peer clients (Yahboom, Loona, VLA, Isaac) + labeled fixtures
-|-- crates/robotcraft-core/   # Command::dispatch, URDF loader, planar FK, reachability, skills
-|-- crates/robotcraft-mcp/    # CLI (robotcraft-cli) + MCP 2024-11-05 stdio server (12 tools)
-|-- crates/robotcraft-app/    # egui studio: local 3D viewport, Yahboom deck, VLA studio, Help UI
-`-- docs/                     # Specifications and architecture notes
+status
+robots
+telemetry yahboom_rover
+teleop --robot yahboom_rover --x 0.2 --confirm
+peers
+yahboom read_all
+yahboom forward --confirm
+vla
+vla-call vla_wall infer_prepare --task-hint "drive to the doorway and stop" --target raspbot
+urdf
+isaac
+isaac-start --scene lab --confirm
+estop --reason "operator halt"
+--mcp
 ```
 
-## Documentation
+## MCP tools
 
-| Doc | Contents |
-|-----|----------|
-| [Operator & Developer Help](HELP.md) | 5-step tour, peer URLs, confirm gates, CLI/MCP usage, shortcuts |
-| [Docs Folder](docs/) | Architecture notes, CAD/BOM plans, and peer integration docs |
+`robot_status`, `robot_list`, `robot_telemetry`, `robot_teleop` (`robot_id`, `confirm`), `robot_estop`, `robot_peers`, `yahboom_call`, `vla_snapshot`, `vla_call`, `urdf_pose`, `isaac_snapshot`, `isaac_start`.
 
-## Requirements
+## Studio
 
-- Windows 10/11 64-bit
-- Optional: running peer servers (`yahboom-mcp`, `loona-mcp`, `vla-mcp`, `isaac-mcp`) for live hardware or simulation
+`start.ps1` builds and opens the egui window. Sidebar: **Yahboom deck** (probe, read sensors, motion with the confirm checkbox, stop) and **VLA studio** (snapshot, Wall-OSS / X-VLA health, infer prepare). The 3D view is a local drawing. It is not a live twin.
 
-## License
+## Status
 
-MIT OR Apache-2.0. Adapted from the Storytold ArtCraft pattern ([storytold/artcraft](https://github.com/storytold/artcraft)).
+**Does today:** Yahboom, VLA, and Isaac peers, confirm gates, labeled fixtures, Nori URDF posing in the viewport, FK plus reachability tests, `--smoke` on the desktop binary.
+
+**Still open:** one URDF (Nori). No Gazebo or MuJoCo client. Isaac is a probe and a confirmed job start, not a rendered twin. No Unitree or LimX transport. Menu bar is File / Robots / View / Security / Help, not the 8-menu craft standard. Help is About only. `14116` is not a listening port. `web/three_viewer.html` does not load the URDF.
+
+**Non-goals:** motion without confirm. A fixture must not be reported as live hardware. Voice wake stays on the fleet voice bus, not in this studio.
+
+## Lineage - the Storytold craft-app pattern
+
+Storytold ArtCraft ([storytold/artcraft](https://github.com/storytold/artcraft) - "the IDE for artists") was the starting point. The 16 craft apps in the Storytold stable each ship one binary that is both the human CLI and the agent MCP server (stdio), headless-first, with `run.json` + report artifacts. That modus operandi and harness is what this repo implements; the code here is independent, the pattern is shared.
