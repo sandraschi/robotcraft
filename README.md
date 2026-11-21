@@ -28,11 +28,13 @@ Embodied intelligence studio and robotics operating workstation uniting URDF kin
 
 > Install the robotcraft MCP extension: download `robotcraft-0.3.0.mcpb` from https://github.com/sandraschi/robotcraft/releases/latest and open it with Claude Desktop.
 
-**From a local checkout (Windows app, CLI, and MCP bundle):**
+**From a local checkout (Windows app and CLI):**
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install-craft.ps1
 ```
+
+Installs the Windows app and the CLI (Start Menu shortcut, CLI on the user PATH). `-RegisterClients` also registers the MCP exe with the IDEs that are installed. `-Clients cursor,claude-desktop` limits that list. `-Mcpb` installs the Claude Desktop extension bundle.
 
 For source builds, peer URL overrides, and CLI examples, see [HELP.md](HELP.md) and [docs/](docs/).
 

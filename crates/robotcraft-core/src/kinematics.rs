@@ -71,6 +71,59 @@ impl KinematicsSolver {
         }
     }
 
+    pub fn loona_petbot_model() -> UrdfRobotModel {
+        UrdfRobotModel {
+            name: "KEYi-Loona-KY004".to_string(),
+            dof: 6,
+            joints: vec![
+                JointDefinition {
+                    name: "wheel_left_bldc".to_string(),
+                    joint_type: "continuous".to_string(),
+                    min_limit_rad: -100.0,
+                    max_limit_rad: 100.0,
+                    current_angle_rad: 0.0,
+                },
+                JointDefinition {
+                    name: "wheel_right_bldc".to_string(),
+                    joint_type: "continuous".to_string(),
+                    min_limit_rad: -100.0,
+                    max_limit_rad: 100.0,
+                    current_angle_rad: 0.0,
+                },
+                JointDefinition {
+                    name: "body_pitch_joint".to_string(),
+                    joint_type: "revolute".to_string(),
+                    min_limit_rad: -0.65,
+                    max_limit_rad: 0.85,
+                    current_angle_rad: 0.15,
+                },
+                JointDefinition {
+                    name: "body_lift_joint".to_string(),
+                    joint_type: "revolute".to_string(),
+                    min_limit_rad: -0.50,
+                    max_limit_rad: 0.70,
+                    current_angle_rad: 0.10,
+                },
+                JointDefinition {
+                    name: "ear_left_planetary".to_string(),
+                    joint_type: "revolute".to_string(),
+                    min_limit_rad: 0.0,
+                    max_limit_rad: 1.57,
+                    current_angle_rad: 0.78,
+                },
+                JointDefinition {
+                    name: "ear_right_planetary".to_string(),
+                    joint_type: "revolute".to_string(),
+                    min_limit_rad: 0.0,
+                    max_limit_rad: 1.57,
+                    current_angle_rad: 0.78,
+                },
+            ],
+            base_link: "loona_body_chassis".to_string(),
+            end_effector_link: "loona_head_lcd_tof".to_string(),
+        }
+    }
+
     pub fn default_6dof_manipulator() -> UrdfRobotModel {
         UrdfRobotModel {
             name: "CraftArm-6DOF".to_string(),

@@ -147,6 +147,46 @@ async fn test_robotcraft_telemetry_and_kinematics() -> Result<(), Box<dyn std::e
     .await;
     assert_eq!(wf_stand["success"], true);
 
+    // 8. Test KEYi Loona (KY004) Petbot in the RobotCraft stable
+    let robots_res = dispatch(Command::ListRobots, &store).await;
+    let robots_arr = robots_res["available_robots"].as_array().ok_or("missing robots")?;
+    assert!(robots_arr.iter().any(|r| r["id"] == "loona_petbot"));
+
+    let loona_model = dispatch(
+        Command::GetRobotModelById {
+            robot_id: "loona_petbot".to_string(),
+        },
+        &store,
+    )
+    .await;
+    assert_eq!(loona_model["success"], true);
+    assert_eq!(loona_model["model"]["name"], "KEYi-Loona-KY004");
+    assert_eq!(loona_model["model"]["dof"], 6);
+
+    let loona_cad = dispatch(
+        Command::GetRobotCadPlan {
+            robot_id: "loona_petbot".to_string(),
+        },
+        &store,
+    )
+    .await;
+    assert_eq!(loona_cad["success"], true);
+    assert_eq!(loona_cad["cad_type"], "TEARDOWN_PCB_PINOUT_6DOF_TOPOLOGY");
+
+    let loona_wf = dispatch(
+        Command::RunAiBehaviorWorkflow {
+            robot_id: "loona_petbot".to_string(),
+            workflow_type: "wave_and_greet".to_string(),
+        },
+        &store,
+    )
+    .await;
+    assert_eq!(loona_wf["success"], true);
+    assert_eq!(
+        loona_wf["trajectory"]["greeting_frame_hex"],
+        "ff 00 00 00 00 00 00 00 01 7f"
+    );
+
     Ok(())
 }
 
