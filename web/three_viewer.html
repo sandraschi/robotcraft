@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RobotCraft 3D Viewer — Saschibot, NoriRobotics A3, Noetix Bumi</title>
+    <title>RobotCraft 3D Viewer — Saschibot, NoriRobotics A3, Noetix Bumi, KEYi Loona (KY004)</title>
     <style>
         :root {
             --bg-color: #0b0f17;
@@ -279,6 +279,13 @@
                     <div style="font-size: 11px; color: var(--text-dim);">21-DOF Bipedal Humanoid</div>
                 </div>
                 <span class="status-chip">Jetson Orin</span>
+            </button>
+            <button class="robot-btn" id="btn-loona" onclick="switchRobot('loona_petbot')">
+                <div>
+                    <div><strong>KEYi Loona (KY004)</strong></div>
+                    <div style="font-size: 11px; color: var(--text-dim);">6-DOF Petbot + Boomy Dance</div>
+                </div>
+                <span class="status-chip">loona-mcp</span>
             </button>
         </div>
 
@@ -667,6 +674,68 @@
             return root;
         }
 
+        // --- BUILD KEYI LOONA PETBOT (KY004 6-DOF) ---
+        function buildLoonaPetbot() {
+            const root = new THREE.Group();
+            root.name = "loona_petbot_root";
+
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.25, metalness: 0.2 });
+            const wheelMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.7 });
+            const goldMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.25, metalness: 0.6 });
+            const lcdMat = new THREE.MeshStandardMaterial({ color: 0x06b6d4, roughness: 0.1, metalness: 0.8 });
+
+            // 2x BLDC Wheels
+            const wheelGeo = new THREE.CylinderGeometry(0.085, 0.085, 0.036, 24);
+            const wheelL = new THREE.Mesh(wheelGeo, wheelMat);
+            wheelL.position.set(-0.02, 0.115, 0.085);
+            root.add(wheelL);
+
+            const wheelR = new THREE.Mesh(wheelGeo, wheelMat);
+            wheelR.position.set(-0.02, -0.115, 0.085);
+            root.add(wheelR);
+
+            // Body posture group (2x brushed DC posture actuators)
+            const bodyGroup = new THREE.Group();
+            bodyGroup.position.set(0, 0, 0.12);
+            const chassis = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.16, 0.11), bodyMat);
+            bodyGroup.add(chassis);
+
+            // Head & 2.4" LCD Eyes + 3D ToF
+            const headGroup = new THREE.Group();
+            headGroup.position.set(0.08, 0, 0.15);
+            const headBox = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.17, 0.14), bodyMat);
+            headGroup.add(headBox);
+
+            const lcdScreen = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.135, 0.10), lcdMat);
+            lcdScreen.position.set(0.075, 0, 0);
+            headGroup.add(lcdScreen);
+
+            // 2x Planetary-Gear Expressive Ears
+            const earL = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.025, 0.085), goldMat);
+            earL.position.set(-0.01, 0.105, 0.09);
+            headGroup.add(earL);
+
+            const earR = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.025, 0.085), goldMat);
+            earR.position.set(-0.01, -0.105, 0.09);
+            headGroup.add(earR);
+
+            bodyGroup.add(headGroup);
+            root.add(bodyGroup);
+
+            animNodes = {
+                root: root,
+                wheelL: wheelL,
+                wheelR: wheelR,
+                torso: bodyGroup,
+                head: headGroup,
+                armL_shoulder: earL,
+                armL_elbow: earR,
+                armR_shoulder: earR,
+            };
+
+            return root;
+        }
+
         // Switch displayed robot
         function switchRobot(robotId) {
             activeRobotId = robotId;
@@ -674,11 +743,13 @@
             if (robotId === "saschibot") document.getElementById("btn-saschi").classList.add("active");
             if (robotId === "nori_a3") document.getElementById("btn-nori").classList.add("active");
             if (robotId === "noetix_bumi") document.getElementById("btn-bumi").classList.add("active");
+            if (robotId === "loona_petbot") document.getElementById("btn-loona").classList.add("active");
 
             scene.remove(activeRobotGroup);
             if (robotId === "saschibot") activeRobotGroup = buildSaschibot();
             else if (robotId === "nori_a3") activeRobotGroup = buildNoriA3();
             else if (robotId === "noetix_bumi") activeRobotGroup = buildNoetixBumi();
+            else if (robotId === "loona_petbot") activeRobotGroup = buildLoonaPetbot();
             scene.add(activeRobotGroup);
 
             updateCadInfo(robotId);
@@ -722,6 +793,17 @@
                 • Protocol: rosbridge /ws (:9090)<br>
                 • Brain: Jetson Orin<br>
                 • Wake Word: "Bumi Bumi" Active`;
+            } else if (robotId === "loona_petbot") {
+                cadBox.innerHTML = `<strong>KEYi Loona (KY004) PCB & 6-DOF Topology:</strong><br>
+                • 6-DOF: 2x BLDC Wheels, 2x Body Tilt, 2x Planetary Ears<br>
+                • Compute: 5 TOPS BPU (RV1126), 2GB LPDDR4, 8GB eMMC<br>
+                • Sensors: 2.4" LCD Eyes, 720p RGB + 3D ToF, 4-Mic Array<br>
+                • Dual PCB: Head Board ↔ Body Board Multi-Signal Ribbon<br>
+                • Choreography Partner: Boomy (yahboom-mcp :10892)`;
+                telemBox.innerHTML = `<strong>Loona (KY004) Telemetry:</strong><br>
+                • Peer: loona-mcp (:11069)<br>
+                • Ports: 9676 (mTLS 1.3), 13579/24680 (0xFF..0x7F)<br>
+                • Greeting: ff 00 00 00 00 00 00 00 01 7f`;
             }
         }
 

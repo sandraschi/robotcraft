@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 pub enum HardwareKind {
     UnitreeQuadruped,
     YahboomRover,
+    LoonaPetbot,
     SaschibotService,
     NoriRoboticsA3,
     NoetixBumiHumanoid,
@@ -72,6 +73,24 @@ impl HardwareAdapter {
                 is_armed: true,
                 emergency_stopped: false,
                 motor_temperatures_c: vec![32.0, 32.5, 33.1, 32.8],
+                current_velocity: TwistVelocity {
+                    linear_x: 0.0,
+                    linear_y: 0.0,
+                    angular_z: 0.0,
+                },
+                timestamp_ms: 1762234000000,
+            },
+            HardwareKind::LoonaPetbot => TelemetrySnapshot {
+                hardware_id: "KEYI-LOONA-KY004".to_string(),
+                kind: HardwareKind::LoonaPetbot,
+                battery_percentage: 89.5,
+                is_armed: true,
+                emergency_stopped: false,
+                motor_temperatures_c: vec![
+                    34.0, 34.2, // 2x BLDC Wheels
+                    33.1, 33.5, // 2x Brushed DC Body Posture
+                    30.5, 30.8, // 2x Planetary Gear Ears
+                ],
                 current_velocity: TwistVelocity {
                     linear_x: 0.0,
                     linear_y: 0.0,

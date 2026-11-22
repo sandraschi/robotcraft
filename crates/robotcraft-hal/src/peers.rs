@@ -10,6 +10,7 @@ use std::time::Duration;
 pub const DEFAULT_YAHBOOM_URL: &str = "http://127.0.0.1:10892";
 pub const DEFAULT_VLA_URL: &str = "http://127.0.0.1:11024";
 pub const DEFAULT_ISAAC_URL: &str = "http://127.0.0.1:11049";
+pub const DEFAULT_LOONA_URL: &str = "http://127.0.0.1:11069";
 
 const MOTION_OPS: &[&str] = &[
     "forward",
@@ -24,6 +25,13 @@ pub fn is_yahboom_id(robot_id: &str) -> bool {
     matches!(
         robot_id.trim().to_ascii_lowercase().as_str(),
         "yahboom" | "yahboom_rover" | "raspbot" | "boomy" | "rosmaster"
+    )
+}
+
+pub fn is_loona_id(robot_id: &str) -> bool {
+    matches!(
+        robot_id.trim().to_ascii_lowercase().as_str(),
+        "loona" | "loona_petbot" | "petbot" | "ky004" | "keyi_loona"
     )
 }
 
@@ -58,6 +66,13 @@ pub fn isaac_base() -> Option<String> {
     normalize_base(
         std::env::var("ROBOTCRAFT_ISAAC_URL").ok().as_deref(),
         DEFAULT_ISAAC_URL,
+    )
+}
+
+pub fn loona_base() -> Option<String> {
+    normalize_base(
+        std::env::var("ROBOTCRAFT_LOONA_URL").ok().as_deref(),
+        DEFAULT_LOONA_URL,
     )
 }
 
@@ -129,11 +144,16 @@ pub fn probe_peers() -> Value {
         Some(base) => probe_get("isaac-mcp", &base, "/api/health"),
         None => disabled("isaac-mcp"),
     };
+    let loona = match loona_base() {
+        Some(base) => probe_get("loona-mcp", &base, "/health"),
+        None => disabled("loona-mcp"),
+    };
     json!({
         "success": true,
         "yahboom": yahboom,
         "vla": vla,
-        "isaac": isaac
+        "isaac": isaac,
+        "loona": loona
     })
 }
 
@@ -185,6 +205,17 @@ pub fn yahboom_tool(operation: &str, param1: Option<&str>) -> Result<Value, Stri
         "param1": param1,
     });
     post_json(&format!("{base}/api/v1/control/tool"), &body, false)
+}
+
+pub fn loona_status() -> Result<Value, String> {
+    let base = loona_base().ok_or_else(|| "loona-mcp disabled".to_string())?;
+    get_json(&format!("{base}/api/status"))
+}
+
+pub fn loona_tool_call(tool: &str, arguments: &Value) -> Result<Value, String> {
+    let base = loona_base().ok_or_else(|| "loona-mcp disabled".to_string())?;
+    let body = json!({ "arguments": arguments });
+    post_json(&format!("{base}/api/tools/{tool}/call"), &body, false)
 }
 
 pub fn vla_status() -> Result<Value, String> {

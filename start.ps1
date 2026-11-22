@@ -7,8 +7,8 @@
 .DESCRIPTION
     Default: incremental cargo build of the desktop app, then run it, so the window always
     runs the current code (an up-to-date build takes a second or two).
-    If the app is already running and the code is newer than that running instance, it says
-    so and stops instead of starting a second, different window.
+    If the app is already running, it asks whether to kill that window. No leaves it
+    running and brings it to the front. Yes closes it, then builds and starts this copy.
 
 .PARAMETER Release
     Optimized build (target\release).
@@ -111,17 +111,69 @@ if (-not $cfg.AppBin) {
     Run $cfg.CliBin $Rest
 }
 
-$running = Get-Process -Name $cfg.AppBin -ErrorAction SilentlyContinue
-if ($running -and -not $New) {
-    $started = ($running | Sort-Object StartTime | Select-Object -First 1).StartTime
-    $newest = Get-CraftNewestSource $RepoRoot
-    if ($newest -gt $started) {
-        Write-Host "[$($cfg.Name)] a window started $started is still open, but the code changed at $newest." -ForegroundColor Yellow
-        Write-Host "[$($cfg.Name)] close it and run start again for the current build (or pass -New for a second window)." -ForegroundColor Yellow
-        exit 2
+function Show-CraftForegroundWindow {
+    param($Process)
+    $Process.Refresh()
+    $hwnd = $Process.MainWindowHandle
+    if ($hwnd -eq [IntPtr]::Zero) { return $false }
+    if (-not ('CraftWindow' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class CraftWindow {
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr processId);
+    [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+}
+'@
     }
-    Write-Host "[$($cfg.Name)] already running (PID $($running[0].Id)), up to date. Pass -New for a second window." -ForegroundColor Green
-    exit 0
+    if ([CraftWindow]::IsIconic($hwnd)) { [void][CraftWindow]::ShowWindow($hwnd, 9) }
+    $front = [CraftWindow]::GetForegroundWindow()
+    $frontThread = [CraftWindow]::GetWindowThreadProcessId($front, [IntPtr]::Zero)
+    $thisThread = [CraftWindow]::GetCurrentThreadId()
+    $attached = $false
+    if ($frontThread -ne $thisThread) {
+        $attached = [CraftWindow]::AttachThreadInput($thisThread, $frontThread, $true)
+    }
+    [void][CraftWindow]::BringWindowToTop($hwnd)
+    [void][CraftWindow]::ShowWindow($hwnd, 9)
+    $ok = [CraftWindow]::SetForegroundWindow($hwnd)
+    if ($attached) { [void][CraftWindow]::AttachThreadInput($thisThread, $frontThread, $false) }
+    return $ok
+}
+
+$running = @(Get-Process -Name $cfg.AppBin -ErrorAction SilentlyContinue)
+if ($running.Count -gt 0 -and -not $New) {
+    $open = $null
+    foreach ($proc in $running) {
+        $proc.Refresh()
+        if ($proc.MainWindowHandle -ne [IntPtr]::Zero) { $open = $proc }
+    }
+    if (-not $open) { $open = $running[0] }
+    $title = $open.MainWindowTitle
+    if (-not $title) { $title = '(no window title)' }
+    Write-Host ""
+    Write-Host "[$($cfg.Name)] already running." -ForegroundColor Yellow
+    Write-Host "[$($cfg.Name)] PID $($open.Id), started $($open.StartTime), title: $title" -ForegroundColor Yellow
+    $answer = Read-Host "[$($cfg.Name)] Kill it and start this build? [y/N]"
+    if ($answer -eq 'y' -or $answer -eq 'Y' -or $answer -eq 'yes' -or $answer -eq 'YES') {
+        Write-Host "[$($cfg.Name)] closing PID $($open.Id) and the other $($cfg.AppBin) processes." -ForegroundColor Yellow
+        foreach ($proc in $running) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
+        Start-Sleep -Seconds 1
+    } else {
+        $brought = Show-CraftForegroundWindow $open
+        if ($brought) {
+            Write-Host "[$($cfg.Name)] left the open window in front. Nothing was killed." -ForegroundColor Green
+            exit 0
+        }
+        Write-Host "[$($cfg.Name)] could not bring PID $($open.Id) to the front. It is still running. Nothing was killed." -ForegroundColor Red
+        exit 1
+    }
 }
 
 Build $cfg.AppPackage $cfg.AppBin
