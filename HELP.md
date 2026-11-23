@@ -22,7 +22,7 @@
 2. **Probe Fleet Peers:** Open the **Yahboom Deck** or **Fleet Status** workspace (or run `robotcraft-cli peers` / MCP `robot_peers`) to check reachability of `yahboom-mcp`, `vla-mcp`, and `isaac-mcp` without moving hardware.
 3. **Select a Robot & Pose URDF:** Use the **Robots** menu to pick `NoriRobotics A3` or `Yahboom ROSMASTER`. In the 3D Viewport, drag joint sliders to re-pose Nori's URDF link frames, or inspect CAD/BOM plans in **CAD Plans & BOM**.
 4. **Validate Kinematics & Dry-Run Teleop:** In **Kinematics Studio**, test planar forward kinematics and target reachability (`0.10 m` to `0.85 m`). In **Teleop Joystick** or **Yahboom Deck**, leave **Confirm** unchecked first to verify the `confirm_required` gate.
-5. **Automate via CLI or MCP:** Run `robotcraft-cli --mcp` for stdio JSON-RPC `2024-11-05` integration with Cursor, Claude, Antigravity, or OpenCode, or press `Ctrl+J` in the studio to open the local-first AI Chat Dock.
+5. **Automate via CLI or MCP:** Run `robotcraft-cli --mcp` for stdio JSON-RPC `2026-07-28` integration with Cursor, Claude, Antigravity, or OpenCode, or press `Ctrl+J` in the studio to open the local-first AI Chat Dock.
 
 ---
 
@@ -87,7 +87,7 @@ robotcraft-cli isaac-start --scene lab --confirm
 robotcraft-cli estop --reason "operator halt"
 ```
 
-### MCP `2024-11-05` Stdio Server (`robotcraft-cli --mcp`)
+### MCP `2026-07-28` Stdio Server (`robotcraft-cli --mcp`)
 
 Stdout is 100% JSON-RPC; diagnostics go to stderr.
 

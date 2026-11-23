@@ -174,7 +174,7 @@ fn render_get_started(ui: &mut egui::Ui) {
         ("2. Probe Fleet Peers", "Open Yahboom Deck or Fleet Status (or run `robotcraft-cli peers`) to check yahboom-mcp (:10892), vla-mcp (:11024), and isaac-mcp (:11049) without moving hardware."),
         ("3. Select Robot & Pose URDF", "Pick NoriRobotics A3 or Yahboom ROSMASTER from the Robots menu. Drag joint sliders in the 3D View to re-pose Nori's URDF link frames."),
         ("4. Validate Kinematics & Dry-Run Teleop", "Check reachability (0.10 m to 0.85 m) in Kinematics Studio. Leave Confirm unchecked in Teleop/Yahboom Deck to inspect the `confirm_required` safety gate first."),
-        ("5. Automate via CLI, MCP & AI Dock", "Use `robotcraft-cli --mcp` for stdio JSON-RPC 2024-11-05, or press Ctrl+J for the local-first AI Chat Dock."),
+        ("5. Automate via CLI, MCP & AI Dock", "Use `robotcraft-cli --mcp` for stdio JSON-RPC 2026-07-28, or press Ctrl+J for the local-first AI Chat Dock."),
     ] {
         ui.strong(step);
         ui.label(detail);
@@ -217,7 +217,7 @@ fn render_usage(ui: &mut egui::Ui) {
          robotcraft-cli estop --reason \"operator halt\"",
     );
     ui.add_space(6.0);
-    ui.strong("MCP 2024-11-05 Stdio (`robotcraft-cli --mcp`)");
+    ui.strong("MCP 2026-07-28 Stdio (`robotcraft-cli --mcp`)");
     ui.label("Tools: robot_status, robot_list, robot_telemetry, robot_teleop, robot_estop, robot_peers, yahboom_call, vla_snapshot, vla_call, urdf_pose, isaac_snapshot, isaac_start, robotcraft_skill_read.");
     ui.label("Resources: `resources/list` and `resources/read` expose `robotcraft://skills/<id>`.");
 }

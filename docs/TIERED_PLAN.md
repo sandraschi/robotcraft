@@ -29,7 +29,7 @@ Tier 1: Core Engine ──> Tier 2: MCP / CLI ──> Tier 3: Desktop UI ──>
 
 ### Tier 2 — CLI, MCP, peers
 - [x] `robotcraft-cli`. Output is JSON. There is no `--json` flag.
-- [x] Stdio MCP `2024-11-05` (`--mcp`). Twelve tools, including `robot_peers`, `yahboom_call`, `vla_snapshot`, `vla_call`, `urdf_pose`, `isaac_snapshot`, `isaac_start`.
+- [x] Stdio MCP `2026-07-28` (`--mcp`). Twelve tools, including `robot_peers`, `yahboom_call`, `vla_snapshot`, `vla_call`, `urdf_pose`, `isaac_snapshot`, `isaac_start`.
 - [x] HTTP peers in `robotcraft-hal`: `yahboom-mcp` `:10892`, `vla-mcp` `:11024`, `isaac-mcp` `:11049`.
 - [ ] MuJoCo and Gazebo clients. Isaac is health, scenes, and a confirmed job start.
 - [x] Desktop `--smoke` runs status and exits. It does not open a window.

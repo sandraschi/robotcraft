@@ -25,7 +25,7 @@ Version **0.3.0**. Four crates. The studio does not bind port 14116; that number
 |---|---|
 | `robotcraft-hal` | HTTP peers. Yahboom on `:10892`, VLA on `:11024`, Isaac on `:11049`. Fixture telemetry for robots with no peer. |
 | `robotcraft-core` | `Command::dispatch`. URDF loader (Nori file), planar forward kinematics, reachability sphere. |
-| `robotcraft-mcp` | Stdio MCP `2024-11-05` and `robotcraft-cli`. |
+| `robotcraft-mcp` | Stdio MCP `2026-07-28` and `robotcraft-cli`. |
 | `robotcraft-app` | egui studio: local 3D viewport, Yahboom deck, VLA studio. |
 
 `web/three_viewer.html` is a separate browser viewport. It does not call the peers.
