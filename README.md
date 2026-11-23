@@ -37,8 +37,9 @@ Version **0.3.0**. Four crates. The studio does not bind port 14116; that number
 | `yahboom-mcp` | `http://127.0.0.1:10892` | `GET /api/v1/health`, `GET /api/v1/telemetry`, `POST /api/v1/control/tool`, `POST /api/v1/control/move`, `POST /api/v1/stop_all` |
 | `vla-mcp` | `http://127.0.0.1:11024` | `GET /api/health`, `GET /api/v1/status`, `GET /api/v1/tools`, `GET /api/v1/fleet`, `GET /api/v1/dataset/episodes`, `POST /api/v1/control/{tool}` |
 | `isaac-mcp` | `http://127.0.0.1:11049` | `GET /api/health`, `GET /api/scenes`, `POST /api/jobs/start` (confirm) |
+| `loona-mcp` | `http://127.0.0.1:11069` | `GET /health`, `GET /api/status`, `POST /api/tools/{tool}/call` |
 
-Disable a peer with `ROBOTCRAFT_YAHBOOM_URL=off`, `ROBOTCRAFT_VLA_URL=off`, or `ROBOTCRAFT_ISAAC_URL=off`. Any other value replaces the base URL (no trailing slash required).
+Disable a peer with `ROBOTCRAFT_YAHBOOM_URL=off`, `ROBOTCRAFT_VLA_URL=off`, `ROBOTCRAFT_ISAAC_URL=off`, or `ROBOTCRAFT_LOONA_URL=off`. Any other value replaces the base URL (no trailing slash required).
 
 ## Nori URDF
 
