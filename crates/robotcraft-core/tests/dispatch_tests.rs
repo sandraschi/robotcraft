@@ -147,6 +147,48 @@ async fn test_robotcraft_telemetry_and_kinematics() -> Result<(), Box<dyn std::e
     .await;
     assert_eq!(wf_stand["success"], true);
 
+    // 8. Test KEYi Loona (KY004) Petbot in the RobotCraft stable
+    let robots_res = dispatch(Command::ListRobots, &store).await;
+    let robots_arr = robots_res["available_robots"]
+        .as_array()
+        .ok_or("missing robots")?;
+    assert!(robots_arr.iter().any(|r| r["id"] == "loona_petbot"));
+
+    let loona_model = dispatch(
+        Command::GetRobotModelById {
+            robot_id: "loona_petbot".to_string(),
+        },
+        &store,
+    )
+    .await;
+    assert_eq!(loona_model["success"], true);
+    assert_eq!(loona_model["model"]["name"], "KEYi-Loona-KY004");
+    assert_eq!(loona_model["model"]["dof"], 6);
+
+    let loona_cad = dispatch(
+        Command::GetRobotCadPlan {
+            robot_id: "loona_petbot".to_string(),
+        },
+        &store,
+    )
+    .await;
+    assert_eq!(loona_cad["success"], true);
+    assert_eq!(loona_cad["cad_type"], "TEARDOWN_PCB_PINOUT_6DOF_TOPOLOGY");
+
+    let loona_wf = dispatch(
+        Command::RunAiBehaviorWorkflow {
+            robot_id: "loona_petbot".to_string(),
+            workflow_type: "wave_and_greet".to_string(),
+        },
+        &store,
+    )
+    .await;
+    assert_eq!(loona_wf["success"], true);
+    assert_eq!(
+        loona_wf["trajectory"]["greeting_frame_hex"],
+        "ff 00 00 00 00 00 00 00 01 7f"
+    );
+
     Ok(())
 }
 
@@ -256,6 +298,68 @@ async fn yahboom_and_vla_gates_do_not_call_peers() -> Result<(), Box<dyn std::er
     assert_eq!(posed["success"], true);
     assert_eq!(posed["robot"], "nori");
     assert!(posed["link_count"].as_u64().unwrap_or(0) > 10);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_floorplan_twin_and_lidar_scan_dispatch() -> Result<(), Box<dyn std::error::Error>> {
+    let store = DatabaseStore::open_in_memory()?;
+
+    let fp = dispatch(Command::FloorplanTwin, &store).await;
+    assert_eq!(fp["success"], true);
+    assert_eq!(fp["floorplan"]["width_m"], 12.0);
+    assert_eq!(fp["floorplan"]["height_m"], 8.0);
+
+    let scan = dispatch(
+        Command::SimulateLidarScan {
+            x: 2.5,
+            y: 3.7,
+            yaw_deg: 0.0,
+            rays: 72,
+            max_range_m: 10.0,
+        },
+        &store,
+    )
+    .await;
+    assert_eq!(scan["success"], true);
+    assert_eq!(scan["scan"]["ray_count"], 72);
+    assert!(scan["scan"]["min_clearance_m"].as_f64().unwrap_or(0.0) > 0.2);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_patrol_planner_and_doorway_clearances_dispatch(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let store = DatabaseStore::open_in_memory()?;
+
+    let plan = dispatch(
+        Command::PlanPatrolPath {
+            robot_id: "saschibot".to_string(),
+            start_x: 1.5,
+            start_y: 3.7,
+            goal_x: 8.0,
+            goal_y: 3.2,
+        },
+        &store,
+    )
+    .await;
+    assert_eq!(plan["success"], true);
+    assert_eq!(plan["plan"]["reachable"], true);
+    assert!(plan["plan"]["total_distance_m"].as_f64().unwrap_or(0.0) > 5.0);
+
+    let doors = dispatch(
+        Command::CheckDoorwayClearance {
+            robot_id: "yahboom_rover".to_string(),
+        },
+        &store,
+    )
+    .await;
+    assert_eq!(doors["success"], true);
+    let arr = doors["doorways"].as_array().ok_or("missing doorways")?;
+    assert_eq!(arr.len(), 3);
+    assert!(arr.iter().all(|d| d["status"] == "passable"));
 
     Ok(())
 }

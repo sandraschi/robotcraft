@@ -8,6 +8,7 @@
 #![deny(clippy::unimplemented)]
 #![deny(clippy::todo)]
 
+pub mod dojo2d;
 pub mod i18n;
 pub mod kinematics;
 pub mod skills;
@@ -90,6 +91,28 @@ pub enum Command {
     IsaacStart {
         scene_name: String,
         confirm: bool,
+    },
+    /// Return the 2D Vienna Altbau Apartment Floorplan Digital Twin.
+    FloorplanTwin,
+    /// Cast 360-degree 2D LIDAR rays from (x, y, yaw_deg) against the floorplan walls & furniture.
+    SimulateLidarScan {
+        x: f32,
+        y: f32,
+        yaw_deg: f32,
+        rays: usize,
+        max_range_m: f32,
+    },
+    /// Occupancy-grid A* patrol path planner with robot footprint clearance.
+    PlanPatrolPath {
+        robot_id: String,
+        start_x: f32,
+        start_y: f32,
+        goal_x: f32,
+        goal_y: f32,
+    },
+    /// Check all apartment doorways against the selected robot's physical footprint width.
+    CheckDoorwayClearance {
+        robot_id: String,
     },
 }
 
@@ -420,6 +443,51 @@ pub async fn dispatch(cmd: Command, _store: &DatabaseStore) -> Value {
             scene_name,
             confirm,
         } => isaac_start(&scene_name, confirm),
+        Command::FloorplanTwin => {
+            let twin = dojo2d::FloorplanTwin::vienna_altbau_seed();
+            json!({
+                "success": true,
+                "floorplan": twin
+            })
+        }
+        Command::SimulateLidarScan {
+            x,
+            y,
+            yaw_deg,
+            rays,
+            max_range_m,
+        } => {
+            let twin = dojo2d::FloorplanTwin::vienna_altbau_seed();
+            let scan = dojo2d::simulate_lidar_scan(&twin, x, y, yaw_deg, rays, max_range_m);
+            json!({
+                "success": true,
+                "scan": scan
+            })
+        }
+        Command::PlanPatrolPath {
+            robot_id,
+            start_x,
+            start_y,
+            goal_x,
+            goal_y,
+        } => {
+            let twin = dojo2d::FloorplanTwin::vienna_altbau_seed();
+            let plan = dojo2d::plan_patrol_path(&twin, &robot_id, start_x, start_y, goal_x, goal_y);
+            json!({
+                "success": true,
+                "plan": plan
+            })
+        }
+        Command::CheckDoorwayClearance { robot_id } => {
+            let twin = dojo2d::FloorplanTwin::vienna_altbau_seed();
+            let clearances = dojo2d::check_doorway_clearances(&twin, &robot_id);
+            json!({
+                "success": true,
+                "robot_id": robot_id,
+                "robot_width_m": dojo2d::robot_footprint_width_m(&robot_id),
+                "doorways": clearances
+            })
+        }
     }
 }
 

@@ -105,6 +105,39 @@ enum Commands {
         #[arg(long, default_value_t = false)]
         confirm: bool,
     },
+    /// Return the 2D Vienna Altbau Apartment Floorplan Digital Twin
+    Floorplan,
+    /// Simulate a 360-degree 2D LIDAR raycast scan in the apartment floorplan
+    LidarScan {
+        #[arg(long, default_value_t = 2.5)]
+        x: f32,
+        #[arg(long, default_value_t = 3.7)]
+        y: f32,
+        #[arg(long, default_value_t = 0.0)]
+        yaw_deg: f32,
+        #[arg(long, default_value_t = 72)]
+        rays: usize,
+        #[arg(long, default_value_t = 10.0)]
+        max_range_m: f32,
+    },
+    /// Plan an A* patrol route across the apartment floorplan
+    PlanPatrol {
+        #[arg(long, default_value = "saschibot")]
+        robot: String,
+        #[arg(long, default_value_t = 1.5)]
+        start_x: f32,
+        #[arg(long, default_value_t = 3.7)]
+        start_y: f32,
+        #[arg(long, default_value_t = 8.0)]
+        goal_x: f32,
+        #[arg(long, default_value_t = 3.2)]
+        goal_y: f32,
+    },
+    /// Check apartment doorway clearances for a robot footprint
+    Doorways {
+        #[arg(long, default_value = "saschibot")]
+        robot: String,
+    },
 }
 
 fn main() {
@@ -243,6 +276,55 @@ fn main() {
                     scene_name: scene,
                     confirm,
                 },
+                &store,
+            ));
+            println!("{}", serde_json::to_string_pretty(&res).unwrap_or_default());
+        }
+        Some(Commands::Floorplan) => {
+            let res = rt.block_on(dispatch(Command::FloorplanTwin, &store));
+            println!("{}", serde_json::to_string_pretty(&res).unwrap_or_default());
+        }
+        Some(Commands::LidarScan {
+            x,
+            y,
+            yaw_deg,
+            rays,
+            max_range_m,
+        }) => {
+            let res = rt.block_on(dispatch(
+                Command::SimulateLidarScan {
+                    x,
+                    y,
+                    yaw_deg,
+                    rays,
+                    max_range_m,
+                },
+                &store,
+            ));
+            println!("{}", serde_json::to_string_pretty(&res).unwrap_or_default());
+        }
+        Some(Commands::PlanPatrol {
+            robot,
+            start_x,
+            start_y,
+            goal_x,
+            goal_y,
+        }) => {
+            let res = rt.block_on(dispatch(
+                Command::PlanPatrolPath {
+                    robot_id: robot,
+                    start_x,
+                    start_y,
+                    goal_x,
+                    goal_y,
+                },
+                &store,
+            ));
+            println!("{}", serde_json::to_string_pretty(&res).unwrap_or_default());
+        }
+        Some(Commands::Doorways { robot }) => {
+            let res = rt.block_on(dispatch(
+                Command::CheckDoorwayClearance { robot_id: robot },
                 &store,
             ));
             println!("{}", serde_json::to_string_pretty(&res).unwrap_or_default());
@@ -394,6 +476,49 @@ fn run_mcp_stdio(rt: &Runtime, store: &DatabaseStore) {
                                 },
                                 "required": ["id"]
                             }
+                        },
+                        {
+                            "name": "floorplan_twin",
+                            "description": "Get the 2D Vienna Altbau Apartment Floorplan Digital Twin (walls, doorways, obstacles).",
+                            "inputSchema": { "type": "object", "properties": {} }
+                        },
+                        {
+                            "name": "simulate_lidar_scan",
+                            "description": "Cast 360-degree 2D LIDAR rays from (x, y, yaw_deg) against the apartment floorplan walls and furniture.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "x": { "type": "number", "description": "Robot X coordinate in meters (0..12)" },
+                                    "y": { "type": "number", "description": "Robot Y coordinate in meters (0..8)" },
+                                    "yaw_deg": { "type": "number", "description": "Heading in degrees" },
+                                    "rays": { "type": "integer", "description": "Number of LIDAR rays (8..360)" },
+                                    "max_range_m": { "type": "number", "description": "Max LIDAR range in meters" }
+                                }
+                            }
+                        },
+                        {
+                            "name": "plan_patrol_path",
+                            "description": "Occupancy-grid A* patrol path planner with robot footprint clearance.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "robot_id": { "type": "string" },
+                                    "start_x": { "type": "number" },
+                                    "start_y": { "type": "number" },
+                                    "goal_x": { "type": "number" },
+                                    "goal_y": { "type": "number" }
+                                }
+                            }
+                        },
+                        {
+                            "name": "check_doorway_clearance",
+                            "description": "Check all apartment doorways against a robot's physical footprint width.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "robot_id": { "type": "string" }
+                                }
+                            }
                         }
                     ]
                 }
@@ -523,6 +648,45 @@ fn run_mcp_stdio(rt: &Runtime, store: &DatabaseStore) {
                             }
                         }
                     }
+                    "floorplan_twin" => rt.block_on(dispatch(Command::FloorplanTwin, store)),
+                    "simulate_lidar_scan" => {
+                        let x = args["x"].as_f64().unwrap_or(2.5) as f32;
+                        let y = args["y"].as_f64().unwrap_or(3.7) as f32;
+                        let yaw_deg = args["yaw_deg"].as_f64().unwrap_or(0.0) as f32;
+                        let rays = args["rays"].as_u64().unwrap_or(72) as usize;
+                        let max_range_m = args["max_range_m"].as_f64().unwrap_or(10.0) as f32;
+                        rt.block_on(dispatch(
+                            Command::SimulateLidarScan {
+                                x,
+                                y,
+                                yaw_deg,
+                                rays,
+                                max_range_m,
+                            },
+                            store,
+                        ))
+                    }
+                    "plan_patrol_path" => {
+                        let robot_id = args["robot_id"].as_str().unwrap_or("saschibot").to_string();
+                        let start_x = args["start_x"].as_f64().unwrap_or(1.5) as f32;
+                        let start_y = args["start_y"].as_f64().unwrap_or(3.7) as f32;
+                        let goal_x = args["goal_x"].as_f64().unwrap_or(8.0) as f32;
+                        let goal_y = args["goal_y"].as_f64().unwrap_or(3.2) as f32;
+                        rt.block_on(dispatch(
+                            Command::PlanPatrolPath {
+                                robot_id,
+                                start_x,
+                                start_y,
+                                goal_x,
+                                goal_y,
+                            },
+                            store,
+                        ))
+                    }
+                    "check_doorway_clearance" => {
+                        let robot_id = args["robot_id"].as_str().unwrap_or("saschibot").to_string();
+                        rt.block_on(dispatch(Command::CheckDoorwayClearance { robot_id }, store))
+                    }
                     unknown => {
                         json!({ "success": false, "error": format!("Unknown tool '{unknown}'") })
                     }
@@ -583,5 +747,44 @@ fn run_mcp_stdio(rt: &Runtime, store: &DatabaseStore) {
 
         let _ = writeln!(stdout, "{resp}");
         let _ = stdout.flush();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cli_parses_lidar_and_patrol_subcommands() {
+        let cli = Cli::try_parse_from([
+            "robotcraft-cli",
+            "lidar-scan",
+            "--x",
+            "2.5",
+            "--y",
+            "3.7",
+            "--rays",
+            "72",
+        ]);
+        assert!(cli.is_ok());
+
+        let cli_patrol = Cli::try_parse_from([
+            "robotcraft-cli",
+            "plan-patrol",
+            "--robot",
+            "saschibot",
+            "--start-x",
+            "1.5",
+            "--goal-x",
+            "8.0",
+        ]);
+        assert!(cli_patrol.is_ok());
+    }
+
+    #[test]
+    fn bundled_skills_exist_for_mcp_resources() {
+        let skills = bundled_skills();
+        assert!(!skills.is_empty());
+        assert!(get_skill(skills[0].id).is_some());
     }
 }

@@ -8,6 +8,7 @@
 #![deny(clippy::unimplemented)]
 #![deny(clippy::todo)]
 
+mod dojo_ui;
 mod help_ui;
 
 use databasecraft_store::DatabaseStore;
@@ -26,6 +27,7 @@ use tokio::runtime::Runtime;
 pub enum ActiveWorkspace {
     Dashboard,
     ThreeJsViewer,
+    ApartmentDojo2D,
     AiWorkflows,
     CadPlans,
     TeleopControl,
@@ -87,6 +89,12 @@ pub struct RobotCraftGui {
     pub isaac_scene: String,
     pub isaac_confirm: bool,
     pub isaac_result: Option<Value>,
+    pub dojo_robot_x: f32,
+    pub dojo_robot_y: f32,
+    pub dojo_robot_yaw: f32,
+    pub dojo_goal_x: f32,
+    pub dojo_goal_y: f32,
+    pub dojo_lidar_rays: usize,
 }
 
 impl RobotCraftGui {
@@ -148,6 +156,12 @@ impl RobotCraftGui {
             isaac_scene: String::new(),
             isaac_confirm: false,
             isaac_result: None,
+            dojo_robot_x: 1.5,
+            dojo_robot_y: 3.7,
+            dojo_robot_yaw: 0.0,
+            dojo_goal_x: 8.0,
+            dojo_goal_y: 3.2,
+            dojo_lidar_rays: 72,
         };
         app.fetch_telemetry();
         app.fetch_model();
@@ -719,7 +733,65 @@ impl eframe::App for RobotCraftGui {
                     }
                 });
 
-                let r_robots = ui.menu_button("Robots", |ui| {
+                let r_edit = ui.menu_button("Edit", |ui| {
+                    if ui.button("Reset Virtual Pose").clicked() {
+                        self.virtual_x = 0.0;
+                        self.virtual_y = 0.0;
+                        self.virtual_yaw = 0.0;
+                        self.dojo_robot_x = 1.5;
+                        self.dojo_robot_y = 3.7;
+                        self.dojo_robot_yaw = 0.0;
+                        ui.close();
+                    }
+                    if ui.button("Reset Patrol Goal").clicked() {
+                        self.dojo_goal_x = 8.0;
+                        self.dojo_goal_y = 3.2;
+                        ui.close();
+                    }
+                });
+
+                let r_view = ui.menu_button("View", |ui| {
+                    let chat_label = if self.show_ai_chat_dock {
+                        "✓ AI Chat Dock (Ctrl+J)"
+                    } else {
+                        "AI Chat Dock (Ctrl+J)"
+                    };
+                    if ui.button(chat_label).clicked() {
+                        self.show_ai_chat_dock = !self.show_ai_chat_dock;
+                        ui.close();
+                    }
+                    ui.separator();
+                    let theme_label = if self.is_dark_theme {
+                        "☀ Switch to Light Theme"
+                    } else {
+                        "🌙 Switch to Dark Theme"
+                    };
+                    if ui.button(theme_label).clicked() {
+                        self.is_dark_theme = !self.is_dark_theme;
+                        ui.close();
+                    }
+                });
+
+                let r_insert = ui.menu_button("Insert", |ui| {
+                    if ui.button("Patrol Preset: Salon -> Goliath Lab").clicked() {
+                        self.active_workspace = ActiveWorkspace::ApartmentDojo2D;
+                        self.dojo_robot_x = 1.5;
+                        self.dojo_robot_y = 3.7;
+                        self.dojo_goal_x = 8.0;
+                        self.dojo_goal_y = 3.2;
+                        ui.close();
+                    }
+                    if ui.button("Patrol Preset: Goliath Lab -> Kitchen").clicked() {
+                        self.active_workspace = ActiveWorkspace::ApartmentDojo2D;
+                        self.dojo_robot_x = 7.5;
+                        self.dojo_robot_y = 3.2;
+                        self.dojo_goal_x = 9.0;
+                        self.dojo_goal_y = 5.6;
+                        ui.close();
+                    }
+                });
+
+                let r_modify = ui.menu_button("Modify", |ui| {
                     if ui.button("Saschibot Mobile Service Bot P6").clicked() {
                         self.selected_robot = "saschibot".to_string();
                         self.fetch_telemetry();
@@ -767,29 +839,16 @@ impl eframe::App for RobotCraftGui {
                     }
                 });
 
-                let r_view = ui.menu_button("View", |ui| {
-                    let chat_label = if self.show_ai_chat_dock {
-                        "✓ AI Chat Dock (Ctrl+J)"
-                    } else {
-                        "AI Chat Dock (Ctrl+J)"
-                    };
-                    if ui.button(chat_label).clicked() {
-                        self.show_ai_chat_dock = !self.show_ai_chat_dock;
+                let r_commands = ui.menu_button("Commands", |ui| {
+                    if ui.button("Probe Fleet Peers").clicked() {
+                        self.fetch_peers();
+                        ui.close();
+                    }
+                    if ui.button("Emergency Stop (E-Stop)").clicked() {
+                        self.trigger_estop();
                         ui.close();
                     }
                     ui.separator();
-                    let theme_label = if self.is_dark_theme {
-                        "☀ Switch to Light Theme"
-                    } else {
-                        "🌙 Switch to Dark Theme"
-                    };
-                    if ui.button(theme_label).clicked() {
-                        self.is_dark_theme = !self.is_dark_theme;
-                        ui.close();
-                    }
-                });
-
-                let r_security = ui.menu_button("Security", |ui| {
                     if self.is_authenticated {
                         ui.label(format!("Operator: {}", self.auth_username));
                         if ui.button("Sign Out").clicked() {
@@ -800,6 +859,24 @@ impl eframe::App for RobotCraftGui {
                     } else if ui.button("Basic Auth Login...").clicked() {
                         self.show_auth_modal = true;
                         ui.close();
+                    }
+                });
+
+                let r_window = ui.menu_button("Window", |ui| {
+                    for (label, ws) in [
+                        ("3D Viewport", ActiveWorkspace::ThreeJsViewer),
+                        ("2D LIDAR & Patrol Dojo", ActiveWorkspace::ApartmentDojo2D),
+                        ("Live Telemetry", ActiveWorkspace::Dashboard),
+                        ("Teleop Joystick", ActiveWorkspace::TeleopControl),
+                        ("Kinematics Studio", ActiveWorkspace::KinematicsStudio),
+                        ("Multi-Robot Fleet", ActiveWorkspace::FleetStatus),
+                        ("Yahboom Deck", ActiveWorkspace::YahboomDeck),
+                        ("VLA Studio", ActiveWorkspace::VlaStudio),
+                    ] {
+                        if ui.button(label).clicked() {
+                            self.active_workspace = ws;
+                            ui.close();
+                        }
                     }
                 });
 
@@ -846,9 +923,12 @@ impl eframe::App for RobotCraftGui {
                     ui.ctx(),
                     &[
                         r_file.response,
-                        r_robots.response,
+                        r_edit.response,
                         r_view.response,
-                        r_security.response,
+                        r_insert.response,
+                        r_modify.response,
+                        r_commands.response,
+                        r_window.response,
                         r_help.response,
                     ],
                 );
@@ -945,6 +1025,13 @@ impl eframe::App for RobotCraftGui {
                 }
                 if nav_btn(
                     ui,
+                    self.active_workspace == ActiveWorkspace::ApartmentDojo2D,
+                    "🗺 2D LIDAR & Patrol Dojo",
+                ) {
+                    self.active_workspace = ActiveWorkspace::ApartmentDojo2D;
+                }
+                if nav_btn(
+                    ui,
                     self.active_workspace == ActiveWorkspace::AiWorkflows,
                     "🧠 AI Motion Workflows",
                 ) {
@@ -1011,6 +1098,9 @@ impl eframe::App for RobotCraftGui {
         help_ui::render_ai_chat_dock(self, ui);
 
         egui::CentralPanel::default().show(ui, |ui| match self.active_workspace {
+            ActiveWorkspace::ApartmentDojo2D => {
+                dojo_ui::render_apartment_dojo_2d(self, ui);
+            }
             ActiveWorkspace::ThreeJsViewer => {
                 ui.heading("🪐 Three.js 3D Virtual Robot Viewer");
                 ui.label("Full WebGL & Native 3D viewport for Saschibot P6, NoriRobotics A3, and Noetix Bumi.");
@@ -1852,4 +1942,44 @@ fn main() -> eframe::Result<()> {
         native_options,
         Box::new(|_cc| Ok(Box::new(RobotCraftGui::new(store, rt)))),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_gui() -> RobotCraftGui {
+        let rt = Arc::new(Runtime::new().unwrap_or_else(|_| std::process::exit(1)));
+        let store =
+            Arc::new(DatabaseStore::open_in_memory().unwrap_or_else(|_| std::process::exit(1)));
+        RobotCraftGui::new(store, rt)
+    }
+
+    #[test]
+    fn gui_initializes_with_default_dojo_and_telemetry() {
+        let app = test_gui();
+        assert_eq!(app.selected_robot, "saschibot");
+        assert_eq!(app.dojo_lidar_rays, 72);
+        assert!(app.telemetry_data.is_some());
+        assert!(app.cad_plan_data.is_some());
+    }
+
+    #[test]
+    fn gui_triggers_ai_workflows_and_estop() {
+        let mut app = test_gui();
+        app.trigger_ai_workflow("explore_and_map");
+        assert!(app.workflow_result.is_some());
+        app.trigger_estop();
+        assert_eq!(app.linear_x, 0.0);
+        assert_eq!(app.angular_z, 0.0);
+    }
+
+    #[test]
+    fn gui_switches_to_apartment_dojo_2d_and_updates_pose() {
+        let mut app = test_gui();
+        app.active_workspace = ActiveWorkspace::ApartmentDojo2D;
+        app.dojo_robot_x = 3.0;
+        app.dojo_robot_y = 4.0;
+        assert_eq!(app.active_workspace, ActiveWorkspace::ApartmentDojo2D);
+    }
 }
