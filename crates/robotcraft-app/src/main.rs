@@ -705,12 +705,49 @@ fn crisp_light_visuals() -> egui::Visuals {
 
 impl eframe::App for RobotCraftGui {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        help_ui::handle_global_shortcuts(self, ui.ctx());
-        ui.ctx().set_visuals(if self.is_dark_theme {
+        let ctx = ui.ctx().clone();
+        let (wheel_y, zoom_reset) = ctx.input(|i| {
+            let ctrl = i.modifiers.ctrl || i.modifiers.command;
+            (
+                if ctrl { i.smooth_scroll_delta.y } else { 0.0 },
+                ctrl && i.key_pressed(egui::Key::Num0),
+            )
+        });
+        if wheel_y.abs() > 0.1 {
+            let step = if wheel_y > 0.0 {
+                1.1_f32
+            } else {
+                1.0 / 1.1_f32
+            };
+            ctx.set_zoom_factor((ctx.zoom_factor() * step).clamp(0.75, 2.0));
+        } else if zoom_reset {
+            ctx.set_zoom_factor(1.0);
+        }
+        help_ui::handle_global_shortcuts(self, &ctx);
+        ctx.set_visuals(if self.is_dark_theme {
             harsh_visuals()
         } else {
             crisp_light_visuals()
         });
+        for theme in [egui::Theme::Dark, egui::Theme::Light] {
+            ctx.style_mut_of(theme, |style| {
+                style
+                    .text_styles
+                    .insert(egui::TextStyle::Heading, egui::FontId::proportional(20.0));
+                style
+                    .text_styles
+                    .insert(egui::TextStyle::Body, egui::FontId::proportional(14.5));
+                style
+                    .text_styles
+                    .insert(egui::TextStyle::Button, egui::FontId::proportional(14.0));
+                style
+                    .text_styles
+                    .insert(egui::TextStyle::Monospace, egui::FontId::monospace(13.5));
+                style
+                    .text_styles
+                    .insert(egui::TextStyle::Small, egui::FontId::proportional(12.5));
+            });
+        }
 
         let cyan = Color32::from_rgb(6, 182, 212);
         let red_estop = Color32::from_rgb(239, 68, 68);
